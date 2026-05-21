@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+
+  # FastAPI AI Service
+  ai-service:
+    build:
+      context: ./ai_service
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=password
+      - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - S3_BUCKET=intellidoc-documents
+      - S3_ENDPOINT=http://minio:9000
+    depends_on:
+      - qdrant
+      - neo4j
+      - redis
+      - rabbitmq
+    volumes:
+      - ./ai_service:/app
+
+  # PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5442:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=intellidoc
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Redis Stack (Needed for Vector Search)
+  redis:
+    image: redis/redis-stack-server:latest
+    ports:
+      - "6389:6379"
+    volumes:
+      - redis_data:/data
+
+  # RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5682:5672"
+      - "15682:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  # MinIO (Object Storage)
+  minio:
+    image: minio/minio
+    ports:
+      - "9010:9000"
+      - "9011:9001"
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=password
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+  # Neo4j (Knowledge Graph)
+  neo4j:
+    image: neo4j:5.20.0
+    ports:
+      - "7484:7474"
+      - "7697:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/password
+    volumes:
+      - neo4j_data:/data
+
+  # Qdrant (Vector Database)
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6343:6333"
+      - "6344:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  minio_data:
+  neo4j_data:
+  qdrant_data:
