@@ -1,0 +1,192 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  password      String?
+  email         String?   @unique
+  role          String?   @default("user")
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  teams         TeamMember[]
+  documents     Document[]
+  conversations Conversation[]
+  accounts      Account[]
+  sessions      Session[]
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     TeamMember[]
+  knowledgeBases KnowledgeBase[]
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  role      String   @default("MEMBER") // ADMIN, MEMBER, VIEWER
+  teamId    String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+}
+
+model KnowledgeBase {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  teamId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  team        Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  documents   Document[]
+}
+
+model Document {
+  id              String   @id @default(cuid())
+  userId          String
+  filename        String
+  mimeType        String
+  storageKey      String
+  status          String   @default("PENDING") // PENDING, INGESTING, READY, FAILED, CANCELLED
+  progress        Int      @default(0)
+  currentStep     String?
+  chunkCount      Int?
+  embeddingModel  String?
+  errorMessage    String?
+  jobId           String?
+  
+  // Existing fields kept
+  title           String?
+  fileSize        Int?
+  knowledgeBaseId String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  knowledgeBase   KnowledgeBase? @relation(fields: [knowledgeBaseId], references: [id], onDelete: SetNull)
+  
+  conversations   Conversation[]
+  chunks          Chunk[]
+}
+
+model Conversation {
+  id          String   @id @default(cuid())
+  title       String
+  userId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  isPinned    Boolean  @default(false)
+  isArchived  Boolean  @default(false)
+  metadata    Json?
+
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents   Document[]
+  messages    Message[]
+
+  @@index([userId])
+}
+
+model Message {
+  id                String   @id @default(cuid())
+  conversationId    String
+  role              String   // USER, ASSISTANT, SYSTEM
+  content           String   @db.Text
+  citations         Json?
+  confidence        Float?
+  hallucinationScore Float?
+  hasWarning        Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  citationsRefs     Citation[]
+  feedbacks         MessageFeedback[]
+
+  @@index([conversationId])
+}
+
+model Citation {
+  id          String   @id @default(cuid())
+  messageId   String
+  docId       String
+  chunkId     String
+  pageNumber  Int
+  excerpt     String   @db.Text
+
+  message     Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model MessageFeedback {
+  id          String   @id @default(cuid())
+  messageId   String   @unique
+  rating      String   // thumbs_up or thumbs_down
+
+  message     Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model Chunk {
+  id          String   @id @default(cuid())
+  documentId  String
+  text        String
+  createdAt   DateTime @default(now())
+
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
