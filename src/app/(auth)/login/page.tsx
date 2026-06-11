@@ -83,7 +83,7 @@ export default function LoginPage() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium" htmlFor="password">Password</label>
-              <Link href="#" className="text-xs text-muted-foreground hover:text-primary transition-colors cursor-pointer">
+              <Link href="/forgot-password" className="text-xs text-muted-foreground hover:text-primary transition-colors cursor-pointer">
                 Forgot password?
               </Link>
             </div>
@@ -113,23 +113,12 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
+         
           <Button 
             variant="outline" 
             className="glass bg-transparent hover:bg-background/50 cursor-pointer" 
-            disabled={githubLoading || googleLoading || loading}
-            onClick={() => {
-              setGithubLoading(true);
-              signIn("github");
-            }}
-          >
-            {githubLoading ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}
-            GitHub
-          </Button>
-          <Button 
-            variant="outline" 
-            className="glass bg-transparent hover:bg-background/50 cursor-pointer" 
-            disabled={googleLoading || githubLoading || loading}
+            disabled={googleLoading || loading}
             onClick={() => {
               setGoogleLoading(true);
               signIn("google");
