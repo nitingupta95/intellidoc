@@ -10,6 +10,30 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ── Payment Enums ──────────────────────────────────────────
+
+enum Plan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  PENDING
+}
+
+// ── User ───────────────────────────────────────────────────
+
 model User {
   id            String    @id @default(cuid())
   name          String?
@@ -20,6 +44,14 @@ model User {
   image         String?
   openaiKey     String?   @db.Text
   notificationPrefs Json?
+
+  // Subscription fields
+  plan                   Plan      @default(FREE)
+  subscriptionStatus     SubscriptionStatus?
+  razorpayCustomerId     String?
+  razorpaySubscriptionId String?
+  currentPeriodEnd       DateTime?
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -28,6 +60,63 @@ model User {
   conversations Conversation[]
   accounts      Account[]
   sessions      Session[]
+  payments      Payment[]
+  subscriptions Subscription[]
+}
+
+// ── Payment ────────────────────────────────────────────────
+
+model Payment {
+  id                 String        @id @default(cuid())
+  userId             String
+  razorpayOrderId    String        @unique
+  razorpayPaymentId  String?
+  razorpaySignature  String?
+  amount             Int           // Amount in paise (₹499 = 49900)
+  currency           String        @default("INR")
+  status             PaymentStatus @default(PENDING)
+  plan               Plan
+  receipt            String?
+  notes              Json?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([razorpayOrderId])
+}
+
+// ── Subscription ───────────────────────────────────────────
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  userId                 String
+  plan                   Plan
+  status                 SubscriptionStatus @default(PENDING)
+  startDate              DateTime           @default(now())
+  endDate                DateTime?
+  razorpaySubscriptionId String?
+  cancelledAt            DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  user                   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ── Webhook Events (idempotency) ───────────────────────────
+
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  eventId     String   @unique   // Razorpay event ID for dedup
+  eventType   String              // e.g. "payment.captured"
+  payload     Json
+  processed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([eventId])
 }
 
 model Team {

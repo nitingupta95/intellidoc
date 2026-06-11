@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  debug: true,
   adapter: PrismaAdapter(db),
   session: { strategy: "jwt" },
   providers: [
@@ -17,6 +18,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      authorization: {
+        params: {
+          prompt: "consent",
+          access_type: "offline",
+          response_type: "code",
+        },
+      },
     }),
     CredentialsProvider({
       name: "Credentials",
@@ -70,19 +78,35 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       return session;
     },
-    async jwt({ token, user, trigger, session }) {
-      if (user) {
-        token.sub = user.id;
+    async jwt({ token, user, trigger, session, account }) {
+      let userImage = user?.image || token.picture || "";
+      // If the image is a massive base64 string from the database, do not put it in the JWT cookie!
+      // Cookies have a strict 4KB limit.
+      if (typeof userImage === 'string' && userImage.length > 2000) {
+        userImage = "";
       }
+
+      const strippedToken = {
+        sub: String(user?.id || token.sub || ""),
+        name: String(user?.name || token.name || ""),
+        email: String(user?.email || token.email || ""),
+        picture: String(userImage),
+      };
+
       if (trigger === "update" && session) {
         if (session.name !== undefined) {
-          token.name = session.name;
+          strippedToken.name = String(session.name);
         }
         if (session.image !== undefined) {
-          token.picture = session.image;
+          let updatedImage = session.image;
+          if (typeof updatedImage === 'string' && updatedImage.length > 2000) {
+            updatedImage = "";
+          }
+          strippedToken.picture = String(updatedImage);
         }
       }
-      return token;
+      
+      return strippedToken;
     }
   }
 });

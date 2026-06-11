@@ -8,7 +8,7 @@ export default auth((req) => {
                           req.nextUrl.pathname.startsWith("/documents") ||
                           req.nextUrl.pathname.startsWith("/chat") ||
                           req.nextUrl.pathname.startsWith("/knowledge-bases") ||
-                          req.nextUrl.pathname.startsWith("/knowledge-graph") ||
+                          req.nextUrl.pathname.startsWith("/pricing") ||
                           req.nextUrl.pathname.startsWith("/analytics") ||
                           req.nextUrl.pathname.startsWith("/billing") ||
                           req.nextUrl.pathname.startsWith("/settings");

@@ -12,8 +12,6 @@ from parsers.document_parser import DocumentParser
 from embeddings.semantic_chunker import SemanticChunker
 from embeddings.embedding_service import EmbeddingService
 from retrieval.qdrant_client import QdrantVectorStore
-from graph.neo4j_client import neo4j_client
-from graph.extractor import extract_graph_from_document
 from llm.rag_chain import RAGChain
 from workers.rabbitmq_consumer import consume
 
@@ -61,11 +59,6 @@ async def startup_event():
     global consumer_task
     logger.info("Starting RabbitMQ Consumer...")
     consumer_task = asyncio.create_task(consume())
-    neo4j_client.init_graph_schema()
-
-@app.on_event("shutdown")
-def shutdown_event():
-    neo4j_client.close()
 
 @app.get("/health")
 async def health_check():
@@ -220,12 +213,6 @@ def process_document_pipeline(file_path: str, document_id: str, metadata: dict, 
         vector_store.upsert_chunks(chunks, embeddings)
         logger.info(f"Upserted {len(chunks)} vectors to Qdrant for {document_id}")
         
-        # 5. Extract Entities (LLM Graph Extraction)
-        # Using a new event loop since this is a synchronous background task in a threadpool
-        user_id = metadata.get("userId", "system")
-        chunks_for_graph = [{"text": c["content"], "chunk_idx": i} for i, c in enumerate(chunks)]
-        asyncio.run(extract_graph_from_document(document_id, user_id, chunks_for_graph, api_key=api_key))
-        
         # Success!
         update_document_status(document_id, {
             "status": "INDEXED", 
@@ -256,101 +243,6 @@ async def process_document(request: DocumentProcessRequest, bg_tasks: Background
         x_openai_api_key
     )
     return {"status": "processing_queued", "document_id": request.document_id}
-
-@app.get("/api/v1/graph")
-async def get_graph(userId: str, docId: str = None, type: str = None, limit: int = 200):
-    try:
-        doc_filter = "AND ANY(d IN e.docIds WHERE d IN $docIds)" if docId else ""
-        type_filter = "AND e.type IN $types" if type else ""
-        
-        docIds = [docId] if docId else []
-        types = [type] if type else []
-
-        nodes_query = f"""
-        MATCH (e:Entity)
-        WHERE e.userId = $userId {doc_filter} {type_filter}
-        RETURN e.id AS id, e.name AS name, e.type AS type, e.docIds AS docIds, 
-               e.userId AS userId, e.frequency AS frequency, e.description AS description
-        ORDER BY e.frequency DESC
-        LIMIT toInteger($limit)
-        """
-        nodes = neo4j_client.run_query(nodes_query, {"userId": userId, "docIds": docIds, "types": types, "limit": limit})
-        
-        if not nodes:
-            return {"nodes": [], "edges": [], "stats": {"nodeCount": 0, "edgeCount": 0, "docCount": 0, "clusterCount": 0}}
-            
-        node_ids = [n["id"] for n in nodes]
-        
-        edges_query = """
-        MATCH (a:Entity)-[r:RELATES]->(b:Entity)
-        WHERE a.userId = $userId AND b.userId = $userId
-          AND a.id IN $nodeIds AND b.id IN $nodeIds
-        RETURN elementId(r) AS id, a.id AS source, b.id AS target,
-               r.type AS type, r.weight AS weight, r.docIds AS docIds, r.context AS context
-        ORDER BY r.weight DESC
-        LIMIT 1000
-        """
-        edges = neo4j_client.run_query(edges_query, {"userId": userId, "nodeIds": node_ids})
-        
-        all_doc_ids = set()
-        all_types = set()
-        for n in nodes:
-            all_doc_ids.update(n.get("docIds", []))
-            all_types.add(n.get("type"))
-            
-        return {
-            "nodes": nodes,
-            "edges": edges,
-            "stats": {
-                "nodeCount": len(nodes),
-                "edgeCount": len(edges),
-                "docCount": len(all_doc_ids),
-                "clusterCount": len(all_types)
-            }
-        }
-    except Exception as e:
-        logger.error(f"Graph query error: {e}")
-        return {"nodes": [], "edges": [], "stats": {"nodeCount": 0, "edgeCount": 0, "docCount": 0, "clusterCount": 0}}
-
-@app.get("/api/v1/graph/search")
-async def search_graph(userId: str, q: str, limit: int = 20):
-    if not q or len(q) < 2:
-        return {"nodes": []}
-        
-    query = """
-    CALL db.index.fulltext.queryNodes("entity_search", $query + "*")
-    YIELD node AS e, score
-    WHERE e.userId = $userId
-    RETURN e.id AS id, e.name AS name, e.type AS type,
-           e.docIds AS docIds, e.frequency AS frequency,
-           e.description AS description, score
-    ORDER BY score DESC
-    LIMIT $limit
-    """
-    nodes = neo4j_client.run_query(query, {"userId": userId, "query": q, "limit": limit})
-    return {"nodes": nodes}
-
-@app.get("/api/v1/graph/export")
-async def export_graph(userId: str, format: str = "json"):
-    data = await get_graph(userId=userId, limit=1000)
-    
-    if format == "json":
-        return data
-        
-    if format == "csv":
-        from fastapi.responses import PlainTextResponse
-        csv = ["id,name,type,frequency,description"]
-        for n in data["nodes"]:
-            name = str(n.get("name", "")).replace('"', '""')
-            desc = str(n.get("description", "")).replace('"', '""')
-            csv.append(f'"{n["id"]}","{name}","{n.get("type", "")}",{n.get("frequency", 0)},"{desc}"')
-        
-        return PlainTextResponse(
-            "\n".join(csv),
-            headers={"Content-Disposition": f'attachment; filename="intellidoc-graph.csv"'}
-        )
-    
-    raise HTTPException(status_code=400, detail="Invalid format. Use json or csv.")
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

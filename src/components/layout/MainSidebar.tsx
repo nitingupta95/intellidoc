@@ -11,7 +11,6 @@ import {
   Files,
   MessageSquare,
   Database,
-  Network,
   Settings,
   CreditCard,
   PanelLeftClose,
@@ -64,7 +63,6 @@ export function MainSidebar() {
           <NavItem href="/documents" icon={<Files size={20} />} label="Documents" active={pathname === "/documents"} isOpen={isOpen} />
           <NavItem href="/chat" icon={<MessageSquare size={20} />} label="AI Chat" active={pathname.startsWith("/chat")} isOpen={isOpen} />
           <NavItem href="/knowledge-bases" icon={<Database size={20} />} label="Knowledge Bases" active={pathname.startsWith("/knowledge-bases")} isOpen={isOpen} />
-          <NavItem href="/knowledge-graph" icon={<Network size={20} />} label="Knowledge Graph" active={pathname === "/knowledge-graph"} isOpen={isOpen} />
         </nav>
 
         <div className="space-y-2 border-t border-border/50 pt-4 mt-auto">

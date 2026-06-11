@@ -6,7 +6,6 @@ langchain>=0.2.6
 langchain-openai>=0.1.10
 langgraph>=0.1.2
 qdrant-client>=1.9.1
-neo4j>=5.21.0
 redis>=5.0.7
 unstructured[all-docs]>=0.14.9
 unstructured[docx]>=0.18.3

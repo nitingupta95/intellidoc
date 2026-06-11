@@ -132,59 +132,61 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="p-10 min-h-full">
+    <div className="h-full flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-y-auto pb-6">
       {/* TOP BAR */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Dashboard</h1>
-          <p className="text-sm text-gray-400 dark:text-gray-50 mt-1">Overview of your intelligent document workspace.</p>
+          <h1 className="text-2xl md:text-3xl font-heading font-bold tracking-tight text-foreground">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-1">Overview of your intelligent document workspace.</p>
         </div>
-        <button className="flex items-center gap-2 bg-white text-black px-4 py-2 rounded-lg font-medium text-sm hover:bg-gray-100 transition-colors">
-          <FileText size={18} />
-          Upload Document
-        </button>
+        <Link href="/documents">
+          <button className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg font-medium text-sm hover:opacity-90 transition-opacity">
+            <FileText size={18} />
+            Upload Document
+          </button>
+        </Link>
       </div>
 
       {/* STAT CARDS ROW */}
-      <div className="grid grid-cols-4 gap-4 mt-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 
           title="Total Documents" 
           value={totalDocuments.toString()} 
           change="+0%" 
-          icon={<FileText size={18} className="text-blue-400" />} 
-          iconBg="bg-blue-400/10"
+          icon={<FileText size={18} className="text-blue-500 dark:text-blue-400" />} 
+          iconBg="bg-blue-500/10"
         />
         <StatCard 
           title="AI Queries" 
           value={aiQueries.toString()} 
           change="+0%" 
-          icon={<MessageSquare size={18} className="text-purple-400" />} 
-          iconBg="bg-purple-400/10"
+          icon={<MessageSquare size={18} className="text-purple-500 dark:text-purple-400" />} 
+          iconBg="bg-purple-500/10"
         />
         <StatCard 
           title="Avg Confidence" 
           value={avgConfidence > 0 ? `${avgConfidence.toFixed(1)}%` : "N/A"} 
           change="+0%" 
-          icon={<Zap size={18} className="text-amber-400" />} 
-          iconBg="bg-amber-400/10"
+          icon={<Zap size={18} className="text-amber-500 dark:text-amber-400" />} 
+          iconBg="bg-amber-500/10"
         />
         <StatCard 
           title="Time Saved" 
           value={`${timeSavedHours} hrs`} 
           change="+0%" 
-          icon={<Clock size={18} className="text-teal-400" />} 
-          iconBg="bg-teal-400/10"
+          icon={<Clock size={18} className="text-teal-500 dark:text-teal-400" />} 
+          iconBg="bg-teal-500/10"
         />
       </div>
 
       {/* LOWER SECTION */}
-      <div className="grid grid-cols-[1fr_340px] gap-4 mt-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4">
         
         {/* LEFT — Recent Knowledge Activity */}
-        <div className="bg-[#222222] border border-white/5 rounded-xl p-5">
+        <div className="glass-panel p-5 border border-border/50">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-white">Recent Knowledge Activity</h2>
-            <button className="text-sm text-gray-400 dark:text-gray-50 hover:text-white transition-colors">View All</button>
+            <h2 className="text-base font-heading font-semibold text-foreground">Recent Knowledge Activity</h2>
+            <Link href="/documents" className="text-sm text-muted-foreground hover:text-foreground transition-colors">View All</Link>
           </div>
           
           <div className="flex flex-col">
@@ -194,8 +196,8 @@ export default async function DashboardPage() {
                   key={`${act.type}-${act.id}`}
                   icon={
                     act.type === "document" 
-                      ? <FileText size={16} className="text-white" />
-                      : <MessageSquare size={16} className="text-white" />
+                      ? <FileText size={16} className="text-foreground/70" />
+                      : <MessageSquare size={16} className="text-foreground/70" />
                   } 
                   title={act.title}
                   meta={`${formatDistanceToNow(act.date, { addSuffix: true })} • By ${session?.user?.name || "You"}`}
@@ -203,33 +205,39 @@ export default async function DashboardPage() {
                 />
               ))
             ) : (
-              <p className="text-sm text-gray-400 dark:text-gray-50 py-4">No recent activity.</p>
+              <p className="text-sm text-muted-foreground py-4">No recent activity.</p>
             )}
           </div>
         </div>
 
         {/* RIGHT — AI Insights */}
-        <div className="bg-[#222222] border border-white/5 rounded-xl p-5">
+        <div className="glass-panel p-5 border border-border/50">
           <div className="flex items-center gap-2 mb-4">
-            <Sparkles size={18} className="text-purple-400" />
-            <h2 className="text-base font-semibold text-white">AI Insights</h2>
+            <Sparkles size={18} className="text-purple-500 dark:text-purple-400" />
+            <h2 className="text-base font-heading font-semibold text-foreground">AI Insights</h2>
           </div>
 
           <div className="flex flex-col gap-3">
             {insights.map((insight) => (
               <div 
                 key={insight.id}
-                className={`border border-white/5 rounded-lg p-4 ${insight.color === "purple" ? "bg-[#2a2020]" : "bg-[#1e2a1e]"}`}
+                className={`border rounded-lg p-4 ${
+                  insight.color === "purple" 
+                    ? "bg-purple-500/5 border-purple-500/10 dark:bg-purple-500/10 dark:border-purple-500/20" 
+                    : "bg-emerald-500/5 border-emerald-500/10 dark:bg-emerald-500/10 dark:border-emerald-500/20"
+                }`}
               >
-                <h3 className={`text-sm font-medium mb-1 ${insight.color === "purple" ? "text-purple-400" : "text-green-400"}`}>
+                <h3 className={`text-sm font-medium mb-1 ${
+                  insight.color === "purple" ? "text-purple-600 dark:text-purple-400" : "text-emerald-600 dark:text-emerald-400"
+                }`}>
                   {insight.title}
                 </h3>
-                <p className="text-xs text-gray-400 dark:text-gray-50 line-clamp-2">
+                <p className="text-xs text-muted-foreground line-clamp-2">
                   {insight.body}
                 </p>
                 <Link 
                   href={insight.href}
-                  className="w-full flex items-center justify-center bg-white/5 hover:bg-white/10 text-sm text-white rounded-md py-2 mt-3 transition-colors"
+                  className="w-full flex items-center justify-center bg-foreground/5 hover:bg-foreground/10 text-sm text-foreground rounded-md py-2 mt-3 transition-colors"
                 >
                   {insight.button}
                 </Link>
@@ -245,16 +253,16 @@ export default async function DashboardPage() {
 
 function StatCard({ title, value, change, icon, iconBg }: { title: string, value: string, change: string, icon: React.ReactNode, iconBg: string }) {
   return (
-    <div className="bg-[#222222] rounded-xl p-5 border border-white/5 flex flex-col justify-between">
+    <div className="glass-panel p-5 border border-border/50 flex flex-col justify-between">
       <div className="flex justify-between items-start mb-4">
-        <h3 className="text-sm text-gray-400 dark:text-gray-50">{title}</h3>
+        <h3 className="text-sm text-muted-foreground">{title}</h3>
         <div className={`w-8 h-8 rounded-full flex items-center justify-center ${iconBg}`}>
           {icon}
         </div>
       </div>
       <div className="flex items-baseline gap-2">
-        <span className="text-3xl font-bold text-white">{value}</span>
-        <span className="text-xs font-medium text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full">
+        <span className="text-2xl md:text-3xl font-bold text-foreground">{value}</span>
+        <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
           {change}
         </span>
       </div>
@@ -264,13 +272,13 @@ function StatCard({ title, value, change, icon, iconBg }: { title: string, value
 
 function ActivityRow({ icon, title, meta, isLast = false }: { icon: React.ReactNode, title: string, meta: string, isLast?: boolean }) {
   return (
-    <div className={`flex items-center gap-3 py-3 ${!isLast ? 'border-b border-white/5' : ''}`}>
-      <div className="w-[36px] h-[36px] bg-white/5 rounded-full flex items-center justify-center shrink-0">
+    <div className={`flex items-center gap-3 py-3 ${!isLast ? 'border-b border-border/50' : ''}`}>
+      <div className="w-9 h-9 bg-foreground/5 rounded-full flex items-center justify-center shrink-0">
         {icon}
       </div>
-      <div>
-        <p className="text-sm text-white truncate max-w-[200px] sm:max-w-[300px] md:max-w-[400px]">{title}</p>
-        <p className="text-xs text-gray-500 dark:text-gray-50 mt-0.5">{meta}</p>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-foreground truncate">{title}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{meta}</p>
       </div>
     </div>
   );

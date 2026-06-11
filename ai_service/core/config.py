@@ -4,9 +4,6 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "IntelliDoc AI V2"
     OPENAI_API_KEY: str = ""
     QDRANT_URL: str = "http://qdrant:6333"
-    NEO4J_URI: str = "bolt://neo4j:7687"
-    NEO4J_USER: str = "neo4j"
-    NEO4J_PASSWORD: str = "password"
     REDIS_URL: str = "redis://redis:6379"
     RABBITMQ_URL: str = "amqp://guest:guest@rabbitmq:5672/"
     
