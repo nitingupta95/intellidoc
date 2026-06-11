@@ -3,6 +3,7 @@ import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/components/auth-provider";
+import { Toaster } from "sonner";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -45,6 +46,7 @@ export default function RootLayout({
             <div className="relative z-0 flex flex-col min-h-screen">
               {children}
             </div>
+            <Toaster position="top-right" richColors />
           </ThemeProvider>
         </AuthProvider>
       </body>

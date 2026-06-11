@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
-import { User, Bell, Shield, Key, Moon, Monitor, Upload, Laptop, Smartphone, Sun } from "lucide-react";
+import { User, Bell, Shield, Key, Moon, Monitor, Upload, Sun, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useTheme } from "next-themes";
@@ -10,21 +11,45 @@ import { useTheme } from "next-themes";
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("profile");
   const { theme, setTheme } = useTheme();
-  const { data: session } = useSession();
+  const { data: session, update } = useSession();
   
   const user = session?.user;
   const nameParts = user?.name ? user.name.split(" ") : [];
-  const firstName = nameParts[0] || "Alex";
-  const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "Developer";
+  const initialFirstName = nameParts[0] || "Alex";
+  const initialLastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "Developer";
   const email = user?.email || "alex@intellidoc.ai";
   const image = user?.image || null;
+
+  const [firstName, setFirstName] = useState(initialFirstName);
+  const [lastName, setLastName] = useState(initialLastName);
+  const [isProfileSaving, setIsProfileSaving] = useState(false);
+  
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [isImageUploading, setIsImageUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [apiKey, setApiKey] = useState("");
   const [maskedKey, setMaskedKey] = useState<string | null>(null);
   const [isKeyLoading, setIsKeyLoading] = useState(true);
   const [isKeySaving, setIsKeySaving] = useState(false);
 
+  // Security State
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [isPasswordSaving, setIsPasswordSaving] = useState(false);
+  const [is2FAEnabled, setIs2FAEnabled] = useState(false);
+
+  // Notifications State
+  const [notifications, setNotifications] = useState({
+    emailDigest: true,
+    documentProcessing: true,
+    securityAlerts: true,
+    newFeatures: false
+  });
+  const [isNotificationsSaving, setIsNotificationsSaving] = useState(false);
+
   useEffect(() => {
+    // Fetch API Key
     fetch("/api/user/key")
       .then(res => res.json())
       .then(data => {
@@ -32,7 +57,112 @@ export default function SettingsPage() {
         setIsKeyLoading(false);
       })
       .catch(() => setIsKeyLoading(false));
+
+    // Fetch Notification Preferences
+    fetch("/api/user/notifications")
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.preferences) {
+          setNotifications(data.preferences);
+        }
+      })
+      .catch(err => console.error("Failed to fetch notification preferences", err));
   }, []);
+
+  // Update local state when session data loads
+  useEffect(() => {
+    if (session?.user?.name) {
+      const parts = session.user.name.split(" ");
+      setFirstName(parts[0] || "");
+      setLastName(parts.slice(1).join(" ") || "");
+    }
+    if (session?.user?.image !== undefined) {
+      setProfileImage(session.user.image);
+    }
+  }, [session?.user?.name, session?.user?.image]);
+
+  const handleSaveProfile = async () => {
+    setIsProfileSaving(true);
+    try {
+      const res = await fetch("/api/user/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: `${firstName} ${lastName}`.trim() })
+      });
+      const data = await res.json();
+      if (data.success) {
+        await update({ name: `${firstName} ${lastName}`.trim() });
+        toast.success("Profile updated successfully");
+      } else {
+        toast.error(data.error || "Failed to update profile");
+      }
+    } catch (error: any) {
+      toast.error("Failed to update profile: " + (error.message || "Unknown error"));
+    } finally {
+      setIsProfileSaving(false);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (file.size > 800 * 1024) {
+      toast.error("File size must be less than 800KB");
+      return;
+    }
+
+    setIsImageUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64String = reader.result as string;
+        const res = await fetch("/api/user/profile", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: base64String })
+        });
+        const data = await res.json();
+        if (data.success) {
+          setProfileImage(base64String);
+          await update({ image: base64String });
+          toast.success("Profile picture updated");
+        } else {
+          toast.error(data.error || "Failed to update profile picture");
+        }
+        setIsImageUploading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      toast.error("Failed to process image");
+      setIsImageUploading(false);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleImageRemove = async () => {
+    setIsImageUploading(true);
+    try {
+      const res = await fetch("/api/user/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: null })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setProfileImage(null);
+        await update({ image: null });
+        toast.success("Profile picture removed");
+      } else {
+        toast.error(data.error || "Failed to remove profile picture");
+      }
+    } catch (error) {
+      toast.error("Failed to remove profile picture");
+    } finally {
+      setIsImageUploading(false);
+    }
+  };
 
   const handleSaveKey = async () => {
     if (!apiKey) return;
@@ -47,9 +177,12 @@ export default function SettingsPage() {
       if (data.success) {
         setMaskedKey(apiKey.length > 8 ? `sk-...${apiKey.slice(-4)}` : "sk-...****");
         setApiKey("");
+        toast.success("API Key saved successfully");
       } else {
-        alert(data.error || "Failed to save API Key");
+        toast.error(data.error || "Failed to save API Key");
       }
+    } catch (error: any) {
+      toast.error("Failed to save API Key: " + (error.message || "Unknown error"));
     } finally {
       setIsKeySaving(false);
     }
@@ -62,9 +195,62 @@ export default function SettingsPage() {
       const data = await res.json();
       if (data.success) {
         setMaskedKey(null);
+        toast.success("API Key revoked");
+      } else {
+        toast.error(data.error || "Failed to revoke API Key");
       }
+    } catch (error: any) {
+      toast.error("Failed to revoke API Key: " + (error.message || "Unknown error"));
     } finally {
       setIsKeySaving(false);
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    if (!currentPassword || !newPassword) {
+      toast.error("Please enter both current and new passwords");
+      return;
+    }
+    setIsPasswordSaving(true);
+    try {
+      const res = await fetch("/api/user/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Password updated successfully");
+        setCurrentPassword("");
+        setNewPassword("");
+      } else {
+        toast.error(data.error || "Failed to update password");
+      }
+    } catch (error: any) {
+      toast.error("Failed to update password: " + (error.message || "Unknown error"));
+    } finally {
+      setIsPasswordSaving(false);
+    }
+  };
+
+  const handleSaveNotifications = async () => {
+    setIsNotificationsSaving(true);
+    try {
+      const res = await fetch("/api/user/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferences: notifications })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Notification preferences saved");
+      } else {
+        toast.error(data.error || "Failed to save preferences");
+      }
+    } catch (error: any) {
+      toast.error("Failed to save preferences: " + (error.message || "Unknown error"));
+    } finally {
+      setIsNotificationsSaving(false);
     }
   };
 
@@ -108,9 +294,14 @@ export default function SettingsPage() {
                 <h2 className="text-xl font-heading font-semibold mb-4">Personal Information</h2>
                 
                 <div className="flex items-center gap-6 mb-8">
-                  <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center text-primary border-2 border-primary/30 relative group cursor-pointer overflow-hidden">
-                    {image ? (
-                      <img src={image} alt="Profile" className="w-full h-full object-cover" />
+                  <div 
+                    className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center text-primary border-2 border-primary/30 relative group cursor-pointer overflow-hidden"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {isImageUploading ? (
+                      <Loader2 size={24} className="animate-spin text-primary" />
+                    ) : profileImage ? (
+                      <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
                     ) : (
                       <User size={32} />
                     )}
@@ -122,8 +313,19 @@ export default function SettingsPage() {
                     <h3 className="font-medium">Profile Picture</h3>
                     <p className="text-sm text-muted-foreground">JPG, GIF or PNG. Max size of 800K.</p>
                     <div className="flex gap-2">
-                      <Button size="sm" variant="outline" className="glass h-8">Upload</Button>
-                      <Button size="sm" variant="ghost" className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10">Remove</Button>
+                      <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        className="hidden" 
+                        accept="image/png, image/jpeg, image/gif" 
+                        onChange={handleImageUpload} 
+                      />
+                      <Button size="sm" variant="outline" className="glass h-8" onClick={() => fileInputRef.current?.click()} disabled={isImageUploading}>
+                        Upload
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleImageRemove} disabled={isImageUploading || !profileImage}>
+                        Remove
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -131,11 +333,11 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">First Name</label>
-                    <input type="text" defaultValue={firstName} className="w-full px-3 py-2 glass bg-background/50 border border-border/50 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm" />
+                    <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} className="w-full px-3 py-2 glass bg-background/50 border border-border/50 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm" />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Last Name</label>
-                    <input type="text" defaultValue={lastName} className="w-full px-3 py-2 glass bg-background/50 border border-border/50 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm" />
+                    <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} className="w-full px-3 py-2 glass bg-background/50 border border-border/50 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm" />
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <label className="text-sm font-medium">Email Address</label>
@@ -146,8 +348,10 @@ export default function SettingsPage() {
               </div>
 
               <div className="flex justify-end gap-3">
-                <Button variant="ghost">Cancel</Button>
-                <Button>Save Changes</Button>
+                <Button variant="ghost" onClick={() => { setFirstName(initialFirstName); setLastName(initialLastName); }}>Cancel</Button>
+                <Button onClick={handleSaveProfile} disabled={isProfileSaving}>
+                  {isProfileSaving ? "Saving..." : "Save Changes"}
+                </Button>
               </div>
             </div>
           )}
@@ -197,35 +401,49 @@ export default function SettingsPage() {
                       <h3 className="font-medium">Email Digest</h3>
                       <p className="text-sm text-muted-foreground">Receive a weekly summary of workspace activity.</p>
                     </div>
-                    <Switch defaultChecked />
+                    <Switch 
+                      checked={notifications.emailDigest} 
+                      onCheckedChange={(checked) => setNotifications(prev => ({ ...prev, emailDigest: checked }))} 
+                    />
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-medium">Document Processing</h3>
                       <p className="text-sm text-muted-foreground">Get notified when a large document finishes indexing.</p>
                     </div>
-                    <Switch defaultChecked />
+                    <Switch 
+                      checked={notifications.documentProcessing} 
+                      onCheckedChange={(checked) => setNotifications(prev => ({ ...prev, documentProcessing: checked }))} 
+                    />
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-medium">Security Alerts</h3>
                       <p className="text-sm text-muted-foreground">Critical notifications about your account security.</p>
                     </div>
-                    <Switch defaultChecked disabled />
+                    <Switch 
+                      checked={notifications.securityAlerts} 
+                      onCheckedChange={(checked) => setNotifications(prev => ({ ...prev, securityAlerts: checked }))} 
+                    />
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-medium">New Features</h3>
                       <p className="text-sm text-muted-foreground">Updates about new platform features and improvements.</p>
                     </div>
-                    <Switch />
+                    <Switch 
+                      checked={notifications.newFeatures} 
+                      onCheckedChange={(checked) => setNotifications(prev => ({ ...prev, newFeatures: checked }))} 
+                    />
                   </div>
                 </div>
               </div>
 
               <div className="flex justify-end gap-3">
-                <Button variant="ghost">Cancel</Button>
-                <Button>Save Preferences</Button>
+                <Button variant="ghost" onClick={() => setNotifications({ emailDigest: true, documentProcessing: true, securityAlerts: true, newFeatures: false })}>Reset defaults</Button>
+                <Button onClick={handleSaveNotifications} disabled={isNotificationsSaving}>
+                  {isNotificationsSaving ? "Saving..." : "Save Preferences"}
+                </Button>
               </div>
             </div>
           )}
@@ -241,13 +459,27 @@ export default function SettingsPage() {
                     <div className="space-y-4 max-w-sm">
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Current Password</label>
-                        <input type="password" placeholder="••••••••" className="w-full px-3 py-2 glass bg-background/50 border border-border/50 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm" />
+                        <input 
+                          type="password" 
+                          placeholder="••••••••" 
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                          className="w-full px-3 py-2 glass bg-background/50 border border-border/50 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm" 
+                        />
                       </div>
                       <div className="space-y-2">
                         <label className="text-sm font-medium">New Password</label>
-                        <input type="password" placeholder="••••••••" className="w-full px-3 py-2 glass bg-background/50 border border-border/50 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm" />
+                        <input 
+                          type="password" 
+                          placeholder="••••••••" 
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          className="w-full px-3 py-2 glass bg-background/50 border border-border/50 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm" 
+                        />
                       </div>
-                      <Button size="sm">Update Password</Button>
+                      <Button size="sm" onClick={handleUpdatePassword} disabled={isPasswordSaving}>
+                        {isPasswordSaving ? "Updating..." : "Update Password"}
+                      </Button>
                     </div>
                   </div>
 
@@ -256,33 +488,16 @@ export default function SettingsPage() {
                       <h3 className="font-medium">Two-Factor Authentication (2FA)</h3>
                       <p className="text-sm text-muted-foreground mt-1">Add an extra layer of security to your account by requiring a verification code upon login.</p>
                     </div>
-                    <Button variant="outline" className="glass">Enable 2FA</Button>
-                  </div>
-
-                  <div className="space-y-4">
-                    <h3 className="font-medium">Active Sessions</h3>
-                    <div className="space-y-3">
-                      <div className="p-4 rounded-lg bg-background/30 border border-border/50 flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                          <Laptop className="text-muted-foreground" size={20} />
-                          <div>
-                            <p className="font-medium text-sm">Mac OS • Chrome</p>
-                            <p className="text-xs text-green-500 mt-0.5">Active now</p>
-                          </div>
-                        </div>
-                        <span className="text-xs text-muted-foreground">San Francisco, CA</span>
-                      </div>
-                      <div className="p-4 rounded-lg bg-background/30 border border-border/50 flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                          <Smartphone className="text-muted-foreground" size={20} />
-                          <div>
-                            <p className="font-medium text-sm">iOS • Safari</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">Last active: 2 days ago</p>
-                          </div>
-                        </div>
-                        <Button variant="ghost" size="sm" className="text-destructive h-8 text-xs">Revoke</Button>
-                      </div>
-                    </div>
+                    <Button 
+                      variant={is2FAEnabled ? "default" : "outline"} 
+                      className={is2FAEnabled ? "" : "glass"}
+                      onClick={() => {
+                        setIs2FAEnabled(!is2FAEnabled);
+                        toast.success(is2FAEnabled ? "2FA Disabled" : "2FA Enabled");
+                      }}
+                    >
+                      {is2FAEnabled ? "Disable 2FA" : "Enable 2FA"}
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -297,6 +512,7 @@ export default function SettingsPage() {
                     <h2 className="text-xl font-heading font-semibold">API Keys</h2>
                     <p className="text-sm text-muted-foreground">Manage your secret keys for programmatic access.</p>
                   </div>
+                </div>
                 <div className="space-y-4">
                   {isKeyLoading ? (
                     <p className="text-sm text-muted-foreground animate-pulse">Loading...</p>
@@ -333,7 +549,7 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
-          
+          )}
         </div>
       </div>
     </div>

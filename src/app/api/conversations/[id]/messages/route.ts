@@ -3,8 +3,9 @@ import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { API_BASE_URL } from '@/lib/api';
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, props: { params: Promise<{ id: string }> }) {
   try {
+    const params = await props.params;
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -31,8 +32,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   }
 }
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
   try {
+    const params = await props.params;
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -91,6 +93,23 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     // Metadata from conversation (e.g. documentIds, knowledgeBaseId)
     const metadata = conversation.metadata as Record<string, any> || {};
+    
+    let finalDocumentIds = metadata.documentIds || null;
+    
+    if (metadata.knowledgeBaseId && !finalDocumentIds) {
+      const kbDocs = await db.document.findMany({
+        where: { knowledgeBaseId: metadata.knowledgeBaseId },
+        select: { id: true }
+      });
+      if (kbDocs.length > 0) {
+        finalDocumentIds = kbDocs.map((d: any) => d.id);
+      } else {
+        // Knowledge base has no documents, prevent it from searching the entire database
+        finalDocumentIds = ["__empty_kb__"];
+      }
+    }
+    
+    console.log("DEBUG: Final Document IDs being sent to Qdrant:", finalDocumentIds, "for KB:", metadata.knowledgeBaseId);
 
     // Proxy stream to FastAPI
     const response = await fetch(`${API_BASE_URL}/chat`, {
@@ -101,7 +120,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       body: JSON.stringify({
         query: message,
         history: formattedHistory,
-        document_ids: metadata.documentIds || null,
+        document_ids: finalDocumentIds,
         knowledge_base_id: metadata.knowledgeBaseId || null,
       }),
     });
@@ -160,7 +179,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
               conversationId: params.id,
               role: 'assistant',
               content: fullAssistantContent.trim(),
-              citations: citationsData ? JSON.stringify(citationsData) : null
+              citations: citationsData ? JSON.stringify(citationsData) : undefined
             }
           });
         } catch (dbErr) {

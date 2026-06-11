@@ -1,4 +1,5 @@
 import logging
+import uuid
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchAny
 from core.config import settings
@@ -31,7 +32,7 @@ class QdrantVectorStore:
         points = []
         for idx, (chunk, vector) in enumerate(zip(chunks, embeddings)):
             points.append(PointStruct(
-                id=idx, # In production use UUID based on document_id + chunk_id
+                id=str(uuid.uuid4()),
                 vector=vector,
                 payload=chunk
             ))

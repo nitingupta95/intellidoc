@@ -15,6 +15,17 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MobileDrawer } from "@/components/layout/mobile-drawer";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
@@ -24,6 +35,8 @@ export default function DocumentsPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [documents, setDocuments] = useState<any[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(true);
+  const [documentToDelete, setDocumentToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDocuments = async (silent = false) => {
@@ -100,29 +113,32 @@ export default function DocumentsPage() {
       await fetchDocuments(true);
     } catch (error) {
       console.error("Upload failed", error);
-      alert("Failed to upload document.");
+      toast.error("Failed to upload document.");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  const handleDelete = async (id: string) => {
-    const confirmed = window.confirm("Are you sure you want to delete this document?");
-    if (!confirmed) return;
-
+  const confirmDelete = async () => {
+    if (!documentToDelete) return;
+    setIsDeleting(true);
     try {
-      const res = await fetch(`/api/documents/${id}`, {
+      const res = await fetch(`/api/documents/${documentToDelete}`, {
         method: 'DELETE',
       });
       if (res.ok) {
-        setDocuments(docs => docs.filter(doc => doc.id !== id));
+        setDocuments(docs => docs.filter(doc => doc.id !== documentToDelete));
+        toast.success("Document deleted successfully");
       } else {
         throw new Error("Delete failed");
       }
     } catch (error) {
       console.error("Failed to delete document", error);
-      alert("Failed to delete document.");
+      toast.error("Failed to delete document.");
+    } finally {
+      setIsDeleting(false);
+      setDocumentToDelete(null);
     }
   };
 
@@ -232,7 +248,7 @@ export default function DocumentsPage() {
                           <MessageSquare className="mr-2 h-4 w-4" /> Chat with Document
                         </Button>
                         <Button 
-                          onClick={() => handleDelete(doc.id)}
+                          onClick={() => setDocumentToDelete(doc.id)}
                           variant="outline" 
                           className="w-full justify-start h-12 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20"
                         >
@@ -262,8 +278,8 @@ export default function DocumentsPage() {
             </div>
 
             {/* Desktop Table View */}
-            <div className="hidden md:block glass-panel overflow-hidden border border-border/50">
-              <table className="w-full text-left text-sm whitespace-nowrap">
+            <div className="hidden md:block glass-panel overflow-x-auto border border-border/50">
+              <table className="w-full text-left text-sm whitespace-nowrap min-w-[800px]">
             <thead className="bg-background/40 border-b border-border/50">
               <tr>
                 <th className="px-6 py-4 font-medium text-muted-foreground">Name</th>
@@ -322,7 +338,7 @@ export default function DocumentsPage() {
                         <MoreVertical size={16} />
                       </Button>
                       <Button 
-                        onClick={() => handleDelete(doc.id)}
+                        onClick={() => setDocumentToDelete(doc.id)}
                         variant="ghost" 
                         size="icon" 
                         className="h-8 w-8 text-destructive hover:bg-destructive/10"
@@ -339,6 +355,27 @@ export default function DocumentsPage() {
         </div>
       </>
     )}
+
+      <AlertDialog open={!!documentToDelete} onOpenChange={(open) => !open && !isDeleting && setDocumentToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete your document and remove its data from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={(e) => { e.preventDefault(); confirmDelete(); }} 
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
   </div>
 </div>
 );

@@ -24,7 +24,7 @@ const processEnv = {
 };
 
 // Validate environment variables
-const parsedServer = typeof window === 'undefined' ? serverSchema.safeParse(processEnv) : { success: true, data: {} as z.infer<typeof serverSchema> };
+const parsedServer = typeof window === 'undefined' ? serverSchema.safeParse(processEnv) : { success: true as const, data: {} as z.infer<typeof serverSchema> };
 const parsedClient = clientSchema.safeParse(processEnv);
 
 if (!parsedServer.success) {

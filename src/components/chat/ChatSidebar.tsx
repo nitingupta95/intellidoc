@@ -7,6 +7,16 @@ import { Input } from "@/components/ui/input";
 import { MessageSquarePlus, Search, MoreVertical, Trash2, Edit2, Pin, Archive, Loader2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export function ChatSidebar({ className }: { className?: string }) {
   const { 
@@ -23,6 +33,8 @@ export function ChatSidebar({ className }: { className?: string }) {
   const [search, setSearch] = useState("");
   const [isRenaming, setIsRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     loadConversations();
@@ -32,10 +44,19 @@ export function ChatSidebar({ className }: { className?: string }) {
     setActiveConversation(null);
   };
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
+  const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (confirm("Are you sure you want to delete this conversation?")) {
-      await deleteConversation(id);
+    setConversationToDelete(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!conversationToDelete) return;
+    setIsDeleting(true);
+    try {
+      await deleteConversation(conversationToDelete);
+    } finally {
+      setIsDeleting(false);
+      setConversationToDelete(null);
     }
   };
 
@@ -142,6 +163,27 @@ export function ChatSidebar({ className }: { className?: string }) {
           ))
         )}
       </div>
+
+      <AlertDialog open={!!conversationToDelete} onOpenChange={(open) => !open && !isDeleting && setConversationToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the chat history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={(e) => { e.preventDefault(); confirmDelete(); }} 
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

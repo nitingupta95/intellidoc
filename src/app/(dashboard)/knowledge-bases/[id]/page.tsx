@@ -3,11 +3,22 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { FolderGit2, ArrowLeft, Database, Loader2, FileText, Trash2, Plus, UploadCloud, Upload } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { getKnowledgeBase, removeDocumentFromKnowledgeBase, addDocumentToKnowledgeBase } from "@/actions/knowledge-bases";
 import { getDocuments } from "@/actions/documents";
 import Link from "next/link";
 import { formatBytes } from "@/lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function KnowledgeBaseDetailPage() {
   const params = useParams();
@@ -18,6 +29,7 @@ export default function KnowledgeBaseDetailPage() {
   const [kb, setKb] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [removingDocId, setRemovingDocId] = useState<string | null>(null);
+  const [documentToRemove, setDocumentToRemove] = useState<string | null>(null);
   
   // Upload state
   const [isUploading, setIsUploading] = useState(false);
@@ -57,14 +69,16 @@ export default function KnowledgeBaseDetailPage() {
     setLoadingDocs(false);
   };
 
-  const handleRemoveDoc = async (docId: string) => {
-    if (!confirm("Remove this document from the knowledge base? It will not be deleted from your account.")) return;
-    setRemovingDocId(docId);
-    const res = await removeDocumentFromKnowledgeBase(docId);
+  const confirmRemoveDoc = async () => {
+    if (!documentToRemove) return;
+    setRemovingDocId(documentToRemove);
+    const idToRemove = documentToRemove;
+    setDocumentToRemove(null);
+    const res = await removeDocumentFromKnowledgeBase(idToRemove);
     if (res.success) {
       fetchKb();
     } else {
-      alert("Failed to remove document");
+      toast.error("Failed to remove document");
     }
     setRemovingDocId(null);
   };
@@ -76,7 +90,7 @@ export default function KnowledgeBaseDetailPage() {
       fetchKb();
       setShowAddModal(false);
     } else {
-      alert("Failed to add document");
+      toast.error("Failed to add document");
     }
     setAddingDocId(null);
   };
@@ -110,7 +124,7 @@ export default function KnowledgeBaseDetailPage() {
       if (showAddModal) setShowAddModal(false);
     } catch (error) {
       console.error("Upload failed", error);
-      alert("Failed to upload document directly to knowledge base.");
+      toast.error("Failed to upload document directly to knowledge base.");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -208,7 +222,7 @@ export default function KnowledgeBaseDetailPage() {
                       variant="ghost" 
                       size="icon" 
                       className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => handleRemoveDoc(doc.id)}
+                      onClick={() => setDocumentToRemove(doc.id)}
                       disabled={removingDocId === doc.id}
                       title="Remove from knowledge base"
                     >
@@ -281,6 +295,23 @@ export default function KnowledgeBaseDetailPage() {
           </div>
         </div>
       )}
+
+      <AlertDialog open={!!documentToRemove} onOpenChange={(open) => !open && setDocumentToRemove(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Document</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove this document from the knowledge base? It will not be deleted from your account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRemoveDoc} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

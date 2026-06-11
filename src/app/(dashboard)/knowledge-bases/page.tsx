@@ -3,10 +3,21 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { FolderGit2, Plus, Database, Users, Calendar, ArrowRight, Loader2, Library, Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { getKnowledgeBases, createKnowledgeBase, updateKnowledgeBase, deleteKnowledgeBase } from "@/actions/knowledge-bases";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function KnowledgeBasesPage() {
   const { data: session } = useSession();
@@ -20,7 +31,8 @@ export default function KnowledgeBasesPage() {
   const [editingKbId, setEditingKbId] = useState<string | null>(null);
   const [newKbName, setNewKbName] = useState("");
   const [newKbDesc, setNewKbDesc] = useState("");
-  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [kbToDelete, setKbToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     fetchKbs();
@@ -52,7 +64,7 @@ export default function KnowledgeBasesPage() {
         setNewKbDesc("");
         fetchKbs();
       } else {
-        alert("Failed to update knowledge base");
+        toast.error("Failed to update knowledge base");
       }
     } else {
       const dummyTeamId = "team_123"; 
@@ -67,7 +79,7 @@ export default function KnowledgeBasesPage() {
         setNewKbDesc("");
         fetchKbs();
       } else {
-        alert("Failed to create knowledge base");
+        toast.error("Failed to create knowledge base");
       }
     }
     setIsCreating(false);
@@ -85,18 +97,23 @@ export default function KnowledgeBasesPage() {
     setNewKbDesc("");
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm("Are you sure you want to delete this knowledge base? This action cannot be undone.")) return;
-    
-    setIsDeleting(id);
-    const res = await deleteKnowledgeBase(id);
+    setKbToDelete(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!kbToDelete) return;
+    setIsDeleting(true);
+    const res = await deleteKnowledgeBase(kbToDelete);
     if (res.success) {
       fetchKbs();
+      toast.success("Knowledge base deleted successfully");
     } else {
-      alert("Failed to delete knowledge base");
+      toast.error("Failed to delete knowledge base");
     }
-    setIsDeleting(null);
+    setIsDeleting(false);
+    setKbToDelete(null);
   };
 
   return (
@@ -208,10 +225,10 @@ export default function KnowledgeBasesPage() {
                         variant="ghost" 
                         size="icon" 
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        onClick={(e) => handleDelete(kb.id, e)}
-                        disabled={isDeleting === kb.id}
+                        onClick={(e) => handleDeleteClick(kb.id, e)}
+                        disabled={isDeleting && kbToDelete === kb.id}
                       >
-                        {isDeleting === kb.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                        {isDeleting && kbToDelete === kb.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                       </Button>
                     </div>
                   </div>
@@ -249,6 +266,27 @@ export default function KnowledgeBasesPage() {
           )}
         </div>
       </div>
+
+      <AlertDialog open={!!kbToDelete} onOpenChange={(open) => !open && !isDeleting && setKbToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete this knowledge base and all its associations.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={(e) => { e.preventDefault(); confirmDelete(); }} 
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
