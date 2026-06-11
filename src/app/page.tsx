@@ -39,7 +39,7 @@ function KnowledgeGraphShowcase() {
         <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-gray-900 dark:text-white mb-4">
           Knowledge, Interconnected.
         </h2>
-        <p className="text-gray-500 dark:text-[#A1A1AA] max-w-2xl mx-auto">
+        <p className="text-gray-500 dark:text-gray-50 max-w-2xl mx-auto">
           IntelliDoc automatically discovers and maps relationships between entities across your entire document repository.
         </p>
       </motion.div>
@@ -115,7 +115,7 @@ function KnowledgeGraphShowcase() {
                     ? 'bg-black text-white border-black/20 dark:bg-white dark:text-black dark:border-white/20 shadow-black/20 dark:shadow-white/20' 
                     : node.type === 'alert'
                     ? 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/50'
-                    : 'bg-white/80 dark:bg-[#050505]/80 text-gray-700 dark:text-gray-300 border-black/10 dark:border-white/10'
+                    : 'bg-white/80 dark:bg-[#050505]/80 text-gray-700 dark:text-gray-50 border-black/10 dark:border-white/10'
                 }`}
               >
                 {node.label}
@@ -138,17 +138,17 @@ export default function Home() {
 
   const cards = [
     {
-      icon: <Search className="w-5 h-5 text-gray-700 dark:text-white/80" />,
+      icon: <Search className="w-5 h-5 text-gray-700 dark:text-gray-50" />,
       title: "Semantic Search",
       description: "Find meaning across millions of tokens, powered by advanced vector embeddings.",
     },
     {
-      icon: <BrainCircuit className="w-5 h-5 text-gray-700 dark:text-white/80" />,
+      icon: <BrainCircuit className="w-5 h-5 text-gray-700 dark:text-gray-50" />,
       title: "Citation-Backed AI",
       description: "Receive verifiable answers with pinpoint source citations and confidence scores.",
     },
     {
-      icon: <Share2 className="w-5 h-5 text-gray-700 dark:text-white/80" />,
+      icon: <Share2 className="w-5 h-5 text-gray-700 dark:text-gray-50" />,
       title: "Knowledge Graphs",
       description: "Automatically map and visualize hidden relationships and entities in your data.",
     }
@@ -178,12 +178,12 @@ export default function Home() {
             {mounted && (
               <button 
                 onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                className="text-gray-500 hover:text-gray-900 dark:text-white/60 dark:hover:text-white transition-colors cursor-pointer"
+                className="text-gray-500 hover:text-gray-900 dark:text-gray-50 dark:hover:text-white transition-colors cursor-pointer"
               >
                 {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
               </button>
             )}
-            <Link href="/login" className="text-gray-500 hover:text-gray-900 dark:text-white/60 dark:hover:text-white transition-colors hidden sm:block">
+            <Link href="/login" className="text-gray-500 hover:text-gray-900 dark:text-gray-50 dark:hover:text-white transition-colors hidden sm:block">
               Sign In
             </Link>
             <Button asChild variant="secondary" size="sm" className="bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90 rounded-full px-4 h-8 text-xs font-medium cursor-pointer">
@@ -201,7 +201,7 @@ export default function Home() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-          className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/5 border border-black/10 text-gray-700 dark:bg-white/5 dark:border-white/10 dark:text-white/70 text-xs font-medium mb-8 shadow-sm dark:shadow-[0_0_15px_rgba(255,255,255,0.03)] cursor-default"
+          className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/5 border border-black/10 text-gray-700 dark:bg-white/5 dark:border-white/10 dark:text-gray-50 text-xs font-medium mb-8 shadow-sm dark:shadow-[0_0_15px_rgba(255,255,255,0.03)] cursor-default"
         >
           <span className="w-1.5 h-1.5 rounded-full bg-black/80 dark:bg-white/80 animate-pulse" />
           IntelliDoc AI 2.0 is live
@@ -222,7 +222,7 @@ export default function Home() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-8 text-lg sm:text-xl text-gray-500 dark:text-[#A1A1AA] max-w-2xl leading-relaxed"
+          className="mt-8 text-lg sm:text-xl text-gray-500 dark:text-gray-50 max-w-2xl leading-relaxed"
         >
           Upload documents, semantic search, AI chat, verifiable citations, and rapid knowledge discovery. All in one quiet, confident workspace.
         </motion.p>
@@ -253,10 +253,10 @@ export default function Home() {
           transition={{ duration: 1, delay: 0.8 }}
           className="mt-24 pt-10 border-t border-black/5 dark:border-white/5 w-full max-w-2xl"
         >
-          <p className="text-xs font-medium text-gray-400 dark:text-white/30 uppercase tracking-widest mb-6">Trusted by exceptional teams</p>
+          <p className="text-xs font-medium text-gray-400 dark:text-gray-50 uppercase tracking-widest mb-6">Trusted by exceptional teams</p>
           <div className="flex flex-wrap justify-center items-center gap-x-12 gap-y-6">
             {logos.map((logo, idx) => (
-              <span key={idx} className="text-xl font-bold font-heading text-gray-300 dark:text-white/20 select-none">{logo}</span>
+              <span key={idx} className="text-xl font-bold font-heading text-gray-300 dark:text-gray-50 select-none">{logo}</span>
             ))}
           </div>
         </motion.div>
@@ -276,7 +276,7 @@ export default function Home() {
                 {card.icon}
               </div>
               <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">{card.title}</h3>
-              <p className="text-sm text-gray-500 dark:text-[#A1A1AA] leading-relaxed">
+              <p className="text-sm text-gray-500 dark:text-gray-50 leading-relaxed">
                 {card.description}
               </p>
             </motion.div>
@@ -289,7 +289,7 @@ export default function Home() {
       </main>
 
       {/* Minimal Footer */}
-      <footer className="relative z-10 border-t border-black/5 dark:border-white/5 py-8 text-center text-xs text-gray-400 dark:text-white/30">
+      <footer className="relative z-10 border-t border-black/5 dark:border-white/5 py-8 text-center text-xs text-gray-400 dark:text-gray-50">
         <div className="max-w-5xl mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-4">
           <span>© {new Date().getFullYear()} IntelliDoc AI. All rights reserved.</span>
           <div className="flex items-center gap-6">

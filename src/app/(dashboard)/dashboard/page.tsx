@@ -137,7 +137,7 @@ export default async function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-white">Dashboard</h1>
-          <p className="text-sm text-gray-400 mt-1">Overview of your intelligent document workspace.</p>
+          <p className="text-sm text-gray-400 dark:text-gray-50 mt-1">Overview of your intelligent document workspace.</p>
         </div>
         <button className="flex items-center gap-2 bg-white text-black px-4 py-2 rounded-lg font-medium text-sm hover:bg-gray-100 transition-colors">
           <FileText size={18} />
@@ -184,7 +184,7 @@ export default async function DashboardPage() {
         <div className="bg-[#222222] border border-white/5 rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-white">Recent Knowledge Activity</h2>
-            <button className="text-sm text-gray-400 hover:text-white transition-colors">View All</button>
+            <button className="text-sm text-gray-400 dark:text-gray-50 hover:text-white transition-colors">View All</button>
           </div>
           
           <div className="flex flex-col">
@@ -203,7 +203,7 @@ export default async function DashboardPage() {
                 />
               ))
             ) : (
-              <p className="text-sm text-gray-400 py-4">No recent activity.</p>
+              <p className="text-sm text-gray-400 dark:text-gray-50 py-4">No recent activity.</p>
             )}
           </div>
         </div>
@@ -224,7 +224,7 @@ export default async function DashboardPage() {
                 <h3 className={`text-sm font-medium mb-1 ${insight.color === "purple" ? "text-purple-400" : "text-green-400"}`}>
                   {insight.title}
                 </h3>
-                <p className="text-xs text-gray-400 line-clamp-2">
+                <p className="text-xs text-gray-400 dark:text-gray-50 line-clamp-2">
                   {insight.body}
                 </p>
                 <Link 
@@ -247,7 +247,7 @@ function StatCard({ title, value, change, icon, iconBg }: { title: string, value
   return (
     <div className="bg-[#222222] rounded-xl p-5 border border-white/5 flex flex-col justify-between">
       <div className="flex justify-between items-start mb-4">
-        <h3 className="text-sm text-gray-400">{title}</h3>
+        <h3 className="text-sm text-gray-400 dark:text-gray-50">{title}</h3>
         <div className={`w-8 h-8 rounded-full flex items-center justify-center ${iconBg}`}>
           {icon}
         </div>
@@ -270,7 +270,7 @@ function ActivityRow({ icon, title, meta, isLast = false }: { icon: React.ReactN
       </div>
       <div>
         <p className="text-sm text-white truncate max-w-[200px] sm:max-w-[300px] md:max-w-[400px]">{title}</p>
-        <p className="text-xs text-gray-500 mt-0.5">{meta}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-50 mt-0.5">{meta}</p>
       </div>
     </div>
   );

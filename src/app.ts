@@ -3,6 +3,7 @@ import cookieParser from 'cookie-parser';
 import { authRouter } from './routes/auth';
 import { documentsRouter } from './routes/documents';
 import crypto from 'crypto';
+import { env } from './env';
 
 export function createExpressApp() {
   const app = express();
@@ -37,7 +38,7 @@ export function createExpressApp() {
   // CORS Preflight headers for security test
   app.options('/api/auth/login', (req, res) => {
     const origin = req.headers.origin;
-    const allowed = process.env.ALLOWED_ORIGIN || 'http://localhost:3000';
+    const allowed = env.ALLOWED_ORIGIN;
     
     if (origin === allowed) {
       res.setHeader('Access-Control-Allow-Origin', allowed);

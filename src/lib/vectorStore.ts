@@ -1,3 +1,11 @@
+import { QdrantClient } from '@qdrant/js-client-rest';
+import { env } from '../env';
+
+export const qdrant = new QdrantClient({
+  url: env.QDRANT_URL,
+  apiKey: process.env.QDRANT_API_KEY,
+});
+
 export type ChunkResult = {
   id: string;
   docId: string;
@@ -11,7 +19,8 @@ export async function retrieveChunks(query: string, docIds: string[]): Promise<C
   }
 
   try {
-    const response = await fetch('http://127.0.0.1:8000/api/v1/retrieve', {
+    const aiServiceUrl = env.AI_SERVICE_URL;
+    const response = await fetch(`${aiServiceUrl}/api/v1/retrieve`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

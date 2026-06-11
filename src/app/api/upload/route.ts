@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { uploadFileToStorage } from "@/lib/storage";
 import { createDocumentRecord } from "@/actions/documents";
 import { auth } from "@/auth";
+import { env } from '../../../env';
 
 export async function POST(req: Request) {
   try {
@@ -31,6 +32,7 @@ export async function POST(req: Request) {
     const dbRecord = await createDocumentRecord({
       title: file.name.split('.').slice(0, -1).join('.'),
       filename: uniqueFileName,
+      storageKey: uniqueFileName,
       fileSize: file.size,
       mimeType: file.type,
       userId: session.user.id,
@@ -42,7 +44,7 @@ export async function POST(req: Request) {
 
     // 3. Trigger FastAPI Background Processing
     try {
-      const aiUrl = process.env.AI_SERVICE_URL || "http://localhost:8000";
+      const aiUrl = env.AI_SERVICE_URL;
       await fetch(`${aiUrl}/api/v1/documents/process`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

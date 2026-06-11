@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { env } from '../env';
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.example.com',
@@ -12,7 +13,7 @@ const transporter = nodemailer.createTransport({
 
 export const emailService = {
   sendPasswordReset: async (email: string, token: string): Promise<void> => {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000';
+    const baseUrl = env.NEXT_PUBLIC_APP_URL || env.APP_URL;
     const resetLink = `${baseUrl}/reset-password?token=${token}`;
 
     const mailOptions = {
