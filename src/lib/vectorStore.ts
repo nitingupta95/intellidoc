@@ -13,18 +13,19 @@ export type ChunkResult = {
   text: string;
 };
 
-export async function retrieveChunks(query: string, docIds: string[]): Promise<ChunkResult[]> {
+export async function retrieveChunks(query: string, docIds: string[], apiKey?: string): Promise<ChunkResult[]> {
   if (!docIds || docIds.length === 0) {
     return [];
   }
 
   try {
     const aiServiceUrl = env.AI_SERVICE_URL;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['X-OpenAI-API-Key'] = apiKey;
+
     const response = await fetch(`${aiServiceUrl}/api/v1/retrieve`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers,
       body: JSON.stringify({
         query,
         document_ids: docIds,

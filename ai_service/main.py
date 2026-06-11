@@ -1,5 +1,5 @@
 import logging
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -72,14 +72,14 @@ async def health_check():
     return {"status": "healthy", "service": settings.PROJECT_NAME}
 
 @app.post("/api/v1/chat")
-async def chat_endpoint(request: ChatRequest):
+async def chat_endpoint(request: ChatRequest, x_openai_api_key: Optional[str] = Header(None)):
     """
     RAG chat endpoint using SSE streaming.
     """
     logger.info(f"Received chat query: {request.query}")
     
     # 1. Embed query
-    query_vector = embedding_svc.embed_query(request.query)
+    query_vector = embedding_svc.embed_query(request.query, api_key=x_openai_api_key)
     
     # 2. Retrieve from Vector DB (Qdrant)
     search_results = vector_store.search(
@@ -109,7 +109,7 @@ async def chat_endpoint(request: ChatRequest):
         # Yield citations first as a metadata event
         yield f"data: {{\"event\": \"citations\", \"data\": {citations}}}\n\n"
         
-        async for chunk in rag_chain.stream_answer(request.query, retrieved_docs, request.history):
+        async for chunk in rag_chain.stream_answer(request.query, retrieved_docs, request.history, api_key=x_openai_api_key):
             # Format as Server-Sent Events (SSE)
             yield f"data: {chunk}\n\n"
             
@@ -123,14 +123,14 @@ class RetrieveRequest(BaseModel):
     limit: int = 5
 
 @app.post("/api/v1/retrieve")
-async def retrieve_endpoint(request: RetrieveRequest):
+async def retrieve_endpoint(request: RetrieveRequest, x_openai_api_key: Optional[str] = Header(None)):
     """
     Endpoint for Next.js to retrieve chunks from Qdrant.
     """
     logger.info(f"Retrieving chunks for query: {request.query}")
     
     # Embed query
-    query_vector = embedding_svc.embed_query(request.query)
+    query_vector = embedding_svc.embed_query(request.query, api_key=x_openai_api_key)
     
     # Retrieve from Qdrant with filter
     search_results = vector_store.search(
@@ -165,7 +165,7 @@ def update_document_status(document_id: str, data: dict):
     except Exception as e:
         logger.error(f"Failed to update document status in Next.js: {e}")
 
-def process_document_pipeline(file_path: str, document_id: str, metadata: dict):
+def process_document_pipeline(file_path: str, document_id: str, metadata: dict, api_key: str = None):
     """Background task for parsing, chunking, and embedding."""
     try:
         update_document_status(document_id, {"status": "PROCESSING", "currentStep": "Downloading from MinIO", "progress": 10})
@@ -213,7 +213,7 @@ def process_document_pipeline(file_path: str, document_id: str, metadata: dict):
         # 3. Embed
         update_document_status(document_id, {"currentStep": "Generating Embeddings", "progress": 70})
         texts = [c["content"] for c in chunks]
-        embeddings = embedding_svc.embed_documents(texts)
+        embeddings = embedding_svc.embed_documents(texts, api_key=api_key)
         
         # 4. Upsert to Qdrant
         update_document_status(document_id, {"currentStep": "Saving to Vector Store", "progress": 90})
@@ -224,7 +224,7 @@ def process_document_pipeline(file_path: str, document_id: str, metadata: dict):
         # Using a new event loop since this is a synchronous background task in a threadpool
         user_id = metadata.get("userId", "system")
         chunks_for_graph = [{"text": c["content"], "chunk_idx": i} for i, c in enumerate(chunks)]
-        asyncio.run(extract_graph_from_document(document_id, user_id, chunks_for_graph))
+        asyncio.run(extract_graph_from_document(document_id, user_id, chunks_for_graph, api_key=api_key))
         
         # Success!
         update_document_status(document_id, {
@@ -243,7 +243,7 @@ def process_document_pipeline(file_path: str, document_id: str, metadata: dict):
         })
 
 @app.post("/api/v1/documents/process")
-async def process_document(request: DocumentProcessRequest, bg_tasks: BackgroundTasks):
+async def process_document(request: DocumentProcessRequest, bg_tasks: BackgroundTasks, x_openai_api_key: Optional[str] = Header(None)):
     """
     Triggers the document processing pipeline asynchronously.
     """
@@ -252,7 +252,8 @@ async def process_document(request: DocumentProcessRequest, bg_tasks: Background
         process_document_pipeline, 
         request.file_path, 
         request.document_id, 
-        request.metadata
+        request.metadata,
+        x_openai_api_key
     )
     return {"status": "processing_queued", "document_id": request.document_id}
 

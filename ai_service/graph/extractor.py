@@ -49,13 +49,14 @@ async def with_retry(func, retries=3):
             logger.warning(f"Retry {attempt + 1}/{retries} due to error: {e}")
             await asyncio.sleep(2 ** attempt)
 
-async def extract_and_store_graph_from_chunk(chunk_text: str, doc_id: str, user_id: str, chunk_idx: int) -> Tuple[int, int]:
+async def extract_and_store_graph_from_chunk(chunk_text: str, doc_id: str, user_id: str, chunk_idx: int, api_key: str = None) -> Tuple[int, int]:
     # 1. Skip very short chunks
     if len(chunk_text.strip()) < 50:
         return 0, 0
 
     # 2. Extract via LLM
-    model = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=settings.OPENAI_API_KEY)
+    key = api_key or settings.OPENAI_API_KEY
+    model = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=key)
     parser = JsonOutputParser()
     prompt = ChatPromptTemplate.from_messages([
         ("system", EXTRACTION_SYSTEM_PROMPT),
@@ -152,7 +153,7 @@ async def extract_and_store_graph_from_chunk(chunk_text: str, doc_id: str, user_
     logger.info(f"graph_extraction_complete: doc={doc_id} chunk={chunk_idx} entities={entities_added} rels={relationships_added}")
     return entities_added, relationships_added
 
-async def extract_graph_from_document(doc_id: str, user_id: str, chunks: List[Dict[str, Any]]):
+async def extract_graph_from_document(doc_id: str, user_id: str, chunks: List[Dict[str, Any]], api_key: str = None):
     total_entities = 0
     total_rels = 0
     
@@ -163,7 +164,7 @@ async def extract_graph_from_document(doc_id: str, user_id: str, chunks: List[Di
         for chunk in batch:
             chunk_text = chunk.get("text", "")
             chunk_idx = chunk.get("chunk_idx", 0)
-            tasks.append(extract_and_store_graph_from_chunk(chunk_text, doc_id, user_id, chunk_idx))
+            tasks.append(extract_and_store_graph_from_chunk(chunk_text, doc_id, user_id, chunk_idx, api_key))
             
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for r in results:

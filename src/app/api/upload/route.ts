@@ -3,6 +3,7 @@ import { uploadFileToStorage } from "@/lib/storage";
 import { createDocumentRecord } from "@/actions/documents";
 import { auth } from "@/auth";
 import { env } from '../../../env';
+import { prisma } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
@@ -44,10 +45,16 @@ export async function POST(req: Request) {
 
     // 3. Trigger FastAPI Background Processing
     try {
+      const userRecord = await prisma.user.findUnique({ where: { id: session.user.id } });
+      const userApiKey = userRecord?.openaiKey || process.env.OPENAI_API_KEY || "";
+
       const aiUrl = env.AI_SERVICE_URL;
       await fetch(`${aiUrl}/api/v1/documents/process`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-OpenAI-API-Key': userApiKey
+        },
         body: JSON.stringify({
           document_id: dbRecord.data!.id,
           file_path: `minio://${process.env.S3_BUCKET_NAME || "intellidoc-documents"}/${uniqueFileName}`,

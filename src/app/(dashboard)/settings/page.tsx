@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { User, Bell, Shield, Key, Moon, Monitor, Upload, Laptop, Smartphone, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,55 @@ export default function SettingsPage() {
   const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "Developer";
   const email = user?.email || "alex@intellidoc.ai";
   const image = user?.image || null;
+
+  const [apiKey, setApiKey] = useState("");
+  const [maskedKey, setMaskedKey] = useState<string | null>(null);
+  const [isKeyLoading, setIsKeyLoading] = useState(true);
+  const [isKeySaving, setIsKeySaving] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/user/key")
+      .then(res => res.json())
+      .then(data => {
+        if (data.hasKey) setMaskedKey(data.maskedKey);
+        setIsKeyLoading(false);
+      })
+      .catch(() => setIsKeyLoading(false));
+  }, []);
+
+  const handleSaveKey = async () => {
+    if (!apiKey) return;
+    setIsKeySaving(true);
+    try {
+      const res = await fetch("/api/user/key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMaskedKey(apiKey.length > 8 ? `sk-...${apiKey.slice(-4)}` : "sk-...****");
+        setApiKey("");
+      } else {
+        alert(data.error || "Failed to save API Key");
+      }
+    } finally {
+      setIsKeySaving(false);
+    }
+  };
+
+  const handleRevokeKey = async () => {
+    setIsKeySaving(true);
+    try {
+      const res = await fetch("/api/user/key", { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        setMaskedKey(null);
+      }
+    } finally {
+      setIsKeySaving(false);
+    }
+  };
 
   return (
     <div className="h-full flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -248,24 +297,43 @@ export default function SettingsPage() {
                     <h2 className="text-xl font-heading font-semibold">API Keys</h2>
                     <p className="text-sm text-muted-foreground">Manage your secret keys for programmatic access.</p>
                   </div>
-                  <Button size="sm">Generate New Key</Button>
-                </div>
-                
                 <div className="space-y-4">
-                  <div className="p-4 rounded-lg bg-background/30 border border-border/50 flex justify-between items-center group">
-                    <div>
-                      <h4 className="font-medium text-sm">Production Key</h4>
-                      <p className="text-xs text-muted-foreground font-mono mt-1">sk_live_••••••••••••••••••••••••</p>
+                  {isKeyLoading ? (
+                    <p className="text-sm text-muted-foreground animate-pulse">Loading...</p>
+                  ) : maskedKey ? (
+                    <div className="p-4 rounded-lg bg-background/30 border border-border/50 flex justify-between items-center group">
+                      <div>
+                        <h4 className="font-medium text-sm">OpenAI API Key</h4>
+                        <p className="text-xs text-muted-foreground font-mono mt-1">{maskedKey}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" className="glass h-8" onClick={handleRevokeKey} disabled={isKeySaving}>
+                          {isKeySaving ? "Revoking..." : "Revoke"}
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <span className="text-xs text-muted-foreground self-center mr-2">Created Oct 2, 2025</span>
-                      <Button variant="outline" size="sm" className="glass h-8">Revoke</Button>
+                  ) : (
+                    <div className="space-y-4">
+                      <p className="text-sm text-muted-foreground">You have not set an OpenAI API Key. Provide one to enable AI functionality.</p>
+                      <div className="flex flex-col gap-2 max-w-md">
+                        <label className="text-sm font-medium">OpenAI API Key</label>
+                        <input 
+                          type="password" 
+                          placeholder="sk-..." 
+                          value={apiKey}
+                          onChange={(e) => setApiKey(e.target.value)}
+                          className="w-full px-3 py-2 glass bg-background/50 border border-border/50 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm" 
+                        />
+                        <Button size="sm" className="w-fit mt-2" onClick={handleSaveKey} disabled={!apiKey || isKeySaving}>
+                          {isKeySaving ? "Saving..." : "Save Key"}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
-          )}
+          
         </div>
       </div>
     </div>

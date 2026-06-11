@@ -6,21 +6,22 @@ from core.config import settings
 
 class RAGChain:
     def __init__(self):
-        self.llm = ChatOpenAI(
-            model="gpt-4o", 
-            temperature=0,
-            openai_api_key=settings.OPENAI_API_KEY
-        )
-        
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", "You are IntelliDoc AI, an expert document intelligence assistant. Answer the user's question based strictly on the following context. If you don't know the answer based on the context, say so. Always cite your sources.\n\nContext:\n{context}"),
             MessagesPlaceholder(variable_name="history"),
             ("human", "{question}")
         ])
-        
-        self.chain = self.prompt | self.llm | StrOutputParser()
 
-    async def stream_answer(self, question: str, retrieved_docs: list[str], history: list[dict] = None):
+    def _get_chain(self, api_key: str = None):
+        key = api_key or settings.OPENAI_API_KEY
+        llm = ChatOpenAI(
+            model="gpt-4o", 
+            temperature=0,
+            openai_api_key=key
+        )
+        return self.prompt | llm | StrOutputParser()
+
+    async def stream_answer(self, question: str, retrieved_docs: list[str], history: list[dict] = None, api_key: str = None):
         """
         Streams the response back.
         """
@@ -35,6 +36,7 @@ class RAGChain:
                 elif msg.get("role") == "assistant":
                     lc_history.append(AIMessage(content=msg.get("content", "")))
 
-        async for chunk in self.chain.astream({"context": context_str, "history": lc_history, "question": question}):
+        chain = self._get_chain(api_key)
+        async for chunk in chain.astream({"context": context_str, "history": lc_history, "question": question}):
             yield chunk
 

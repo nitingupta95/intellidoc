@@ -22,7 +22,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ session
       return NextResponse.json({ error: 'EMPTY_MESSAGE' }, { status: 422 });
     }
 
-    const chatSession = await db.chatSession.findUnique({
+    const chatSession = await db.conversation.findUnique({
       where: { id: sessionId },
       include: { documents: { select: { id: true } } }
     });
@@ -40,7 +40,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ session
     // Save User Message synchronously
     await db.message.create({
       data: {
-        sessionId,
+        conversationId: sessionId,
         role: 'user',
         content: userText
       }
@@ -63,7 +63,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ session
           sendEvent('start', { sessionId, model: 'gpt-4o-mini' });
 
           // 2. Retrieve context
-          const rawChunks = await retrieveChunks(userText, docIds);
+          const userId = session?.user?.id;
+          if (!userId) throw new Error("Unauthorized");
+          const userRecord = await db.user.findUnique({ where: { id: userId } });
+          const userApiKey = userRecord?.openaiKey || process.env.OPENAI_API_KEY || undefined;
+
+          const rawChunks = await retrieveChunks(userText, docIds, userApiKey);
           
           // Deduplicate chunks by chunkId
           const uniqueChunksMap = new Map();
@@ -100,12 +105,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ session
           // 5. Save Assistant Message + Citations
           const assistantMsg = await db.message.create({
             data: {
-              sessionId,
+              conversationId: sessionId,
               role: 'assistant',
               content: fullText,
               hallucinationScore,
               hasWarning,
-              citations: {
+              citationsRefs: {
                 create: uniqueChunks.map(c => ({
                   docId: c.docId,
                   chunkId: c.id,
@@ -114,13 +119,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ session
                 }))
               }
             },
-            include: { citations: true }
+            include: { citationsRefs: true }
           });
 
           // 6. Emit Done
           sendEvent('done', { 
             tokenCount, 
-            citations: assistantMsg.citations 
+            citations: assistantMsg.citationsRefs 
           });
 
         } catch (error: any) {

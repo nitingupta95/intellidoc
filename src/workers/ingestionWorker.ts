@@ -30,7 +30,9 @@ export const processIngestionJob = async (job: { data: { docId: string; userId: 
     });
 
     // 3. Embedding
-    const openai = new OpenAI();
+    const user = await prisma.user.findUnique({ where: { id: job.data.userId } });
+    const apiKey = user?.openaiKey || process.env.OPENAI_API_KEY;
+    const openai = new OpenAI({ apiKey });
     const embeddings = await Promise.all(chunks.map(async (text) => {
       const res = await openai.embeddings.create({
         model: 'text-embedding-3-small',
