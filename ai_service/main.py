@@ -25,10 +25,12 @@ app = FastAPI(
     version="2.0.0"
 )
 
+import os
+
 # CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=[settings.ALLOWED_ORIGIN], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -151,8 +153,9 @@ import httpx
 
 def update_document_status(document_id: str, data: dict):
     try:
-        # We assume Next.js is running on port 3000
-        url = f"http://localhost:3000/api/documents/{document_id}"
+        # Use ALLOWED_ORIGIN from environment variables (which points to the frontend URL)
+        frontend_url = settings.ALLOWED_ORIGIN.rstrip("/")
+        url = f"{frontend_url}/api/documents/{document_id}"
         with httpx.Client(timeout=5.0) as client:
             client.patch(url, json=data)
     except Exception as e:

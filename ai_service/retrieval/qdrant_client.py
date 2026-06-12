@@ -8,7 +8,11 @@ logger = logging.getLogger(__name__)
 
 class QdrantVectorStore:
     def __init__(self, collection_name="documents"):
-        self.client = QdrantClient(url=settings.QDRANT_URL)
+        self.client = QdrantClient(
+            url=settings.QDRANT_URL,
+            port=443 if settings.QDRANT_URL.startswith("https") else 6333,
+            api_key=settings.QDRANT_API_KEY if settings.QDRANT_API_KEY else None
+        )
         self.collection_name = collection_name
         self._ensure_collection()
 
