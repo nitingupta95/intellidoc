@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     AWS_REGION: str = "us-east-1"
     S3_BUCKET: str = "intellidoc-documents"
     S3_ENDPOINT: str = "http://minio:9000"
+
+    AI_SERVICE_URL: str = "http://localhost:8000"
     
     class Config:
         env_file = ".env"

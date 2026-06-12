@@ -28,7 +28,7 @@ async def process_message(message: IncomingMessage):
             
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    "http://localhost:8000/api/v1/documents/process",
+                    f"{settings.AI_SERVICE_URL}/api/v1/documents/process",
                     json={
                         "document_id": document_id,
                         "file_path": minio_path,
