@@ -40,7 +40,7 @@ app.add_middleware(
 parser = DocumentParser()
 chunker = SemanticChunker()
 embedding_svc = EmbeddingService()
-vector_store = QdrantVectorStore()
+vector_store = None
 rag_chain = RAGChain()
 
 class ChatRequest(BaseModel):
@@ -58,7 +58,13 @@ consumer_task = None
 
 @app.on_event("startup")
 async def startup_event():
-    global consumer_task
+    global consumer_task, vector_store
+    logger.info("Initializing Vector Store...")
+    try:
+        vector_store = QdrantVectorStore()
+    except Exception as e:
+        logger.error(f"Failed to initialize Vector Store: {e}")
+        
     logger.info("Starting RabbitMQ Consumer...")
     consumer_task = asyncio.create_task(consume())
 
