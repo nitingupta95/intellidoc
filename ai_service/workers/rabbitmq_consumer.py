@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from aio_pika import connect, IncomingMessage
+from aio_pika import connect_robust, IncomingMessage
 import httpx
 from core.config import settings
 
@@ -47,7 +47,7 @@ async def process_message(message: IncomingMessage):
 
 async def consume():
     try:
-        connection = await connect(settings.RABBITMQ_URL)
+        connection = await connect_robust(settings.RABBITMQ_URL, timeout=10)
         channel = await connection.channel()
         
         queue = await channel.declare_queue("document_processing", durable=True)
