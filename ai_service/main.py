@@ -248,4 +248,10 @@ async def process_document(request: DocumentProcessRequest, bg_tasks: Background
     return {"status": "processing_queued", "document_id": request.document_id}
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        reload=False
+    )
