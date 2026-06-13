@@ -1,19 +1,8 @@
 import type { Metadata } from "next";
-import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/components/auth-provider";
 import { Toaster } from "sonner";
-
-const inter = Inter({
-  variable: "--font-sans",
-  subsets: ["latin"],
-});
-
-const outfit = Outfit({
-  variable: "--font-heading",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "IntelliDoc AI | Enterprise Document Intelligence",
@@ -28,7 +17,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${outfit.variable} antialiased bg-background text-foreground min-h-screen`}
+        className="font-sans antialiased bg-background text-foreground min-h-screen"
       >
         <AuthProvider>
             <ThemeProvider
