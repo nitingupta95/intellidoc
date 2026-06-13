@@ -43,6 +43,13 @@ embedding_svc = EmbeddingService()
 vector_store = None
 rag_chain = RAGChain()
 
+def get_vector_store():
+    global vector_store
+    if vector_store is None:
+        logger.info("Initializing Vector Store (lazy)...")
+        vector_store = QdrantVectorStore()
+    return vector_store
+
 class ChatRequest(BaseModel):
     query: str
     document_ids: Optional[List[str]] = None
@@ -58,13 +65,7 @@ consumer_task = None
 
 @app.on_event("startup")
 async def startup_event():
-    global consumer_task, vector_store
-    logger.info("Initializing Vector Store...")
-    try:
-        vector_store = QdrantVectorStore()
-    except Exception as e:
-        logger.error(f"Failed to initialize Vector Store: {e}")
-        
+    global consumer_task
     logger.info("Starting RabbitMQ Consumer...")
     consumer_task = asyncio.create_task(consume())
 
@@ -83,7 +84,8 @@ async def chat_endpoint(request: ChatRequest, x_openai_api_key: Optional[str] = 
     query_vector = embedding_svc.embed_query(request.query, api_key=x_openai_api_key)
     
     # 2. Retrieve from Vector DB (Qdrant)
-    search_results = vector_store.search(
+    vs = get_vector_store()
+    search_results = vs.search(
         query_vector=query_vector, 
         limit=5, 
         document_ids=request.document_ids
@@ -134,7 +136,8 @@ async def retrieve_endpoint(request: RetrieveRequest, x_openai_api_key: Optional
     query_vector = embedding_svc.embed_query(request.query, api_key=x_openai_api_key)
     
     # Retrieve from Qdrant with filter
-    search_results = vector_store.search(
+    vs = get_vector_store()
+    search_results = vs.search(
         query_vector=query_vector, 
         limit=request.limit, 
         document_ids=request.document_ids
@@ -219,7 +222,8 @@ def process_document_pipeline(file_path: str, document_id: str, metadata: dict, 
         
         # 4. Upsert to Qdrant
         update_document_status(document_id, {"currentStep": "Saving to Vector Store", "progress": 90})
-        vector_store.upsert_chunks(chunks, embeddings)
+        vs = get_vector_store()
+        vs.upsert_chunks(chunks, embeddings)
         logger.info(f"Upserted {len(chunks)} vectors to Qdrant for {document_id}")
         
         # Success!
