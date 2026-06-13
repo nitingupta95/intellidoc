@@ -126,7 +126,9 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     });
 
     if (!response.ok) {
-      return NextResponse.json({ error: 'Failed to contact AI backend' }, { status: 502 });
+      const errorText = await response.text();
+      console.error('AI Backend Error:', response.status, errorText);
+      return NextResponse.json({ error: 'Failed to contact AI backend', details: errorText, status: response.status }, { status: 502 });
     }
 
     // Transform stream: Intercept and save the assistant's message at the end
