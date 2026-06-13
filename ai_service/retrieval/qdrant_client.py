@@ -25,6 +25,20 @@ class QdrantVectorStore:
                     vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
                 )
                 logger.info(f"Created Qdrant collection: {self.collection_name}")
+                
+            # Always ensure the payload index exists for document_id filtering
+            try:
+                from qdrant_client.models import PayloadSchemaType
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="metadata.document_id",
+                    field_schema=PayloadSchemaType.KEYWORD,
+                )
+                logger.info("Ensured keyword payload index for metadata.document_id")
+            except Exception as index_err:
+                # If index already exists or another minor error, it's safe to ignore
+                logger.warning(f"Note on payload index (might already exist): {index_err}")
+                
         except Exception as e:
             logger.error(f"Error ensuring Qdrant collection: {e}")
 
