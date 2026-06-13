@@ -80,45 +80,51 @@ async def chat_endpoint(request: ChatRequest, x_openai_api_key: Optional[str] = 
     """
     logger.info(f"Received chat query: {request.query}")
     
-    # 1. Embed query
-    query_vector = embedding_svc.embed_query(request.query, api_key=x_openai_api_key)
-    
-    # 2. Retrieve from Vector DB (Qdrant)
-    vs = get_vector_store()
-    search_results = vs.search(
-        query_vector=query_vector, 
-        limit=5, 
-        document_ids=request.document_ids
-    )
-    
-    # Extract text from payloads
-    retrieved_docs = []
-    citations = []
-    for res in search_results:
-        payload = res.payload or {}
-        text = payload.get("content", "")
-        retrieved_docs.append(text)
-        citations.append({
-            "score": res.score,
-            "text_snippet": text[:100] + "...",
-            "metadata": payload.get("metadata", {})
-        })
+    try:
+        # 1. Embed query
+        query_vector = embedding_svc.embed_query(request.query, api_key=x_openai_api_key)
         
-    if not retrieved_docs:
-        retrieved_docs = ["No relevant context found in documents."]
-
-    # 3. Stream LLM Response via LangChain
-    async def response_generator():
-        # Yield citations first as a metadata event
-        yield f"data: {{\"event\": \"citations\", \"data\": {citations}}}\n\n"
+        # 2. Retrieve from Vector DB (Qdrant)
+        vs = get_vector_store()
+        search_results = vs.search(
+            query_vector=query_vector, 
+            limit=5, 
+            document_ids=request.document_ids
+        )
         
-        async for chunk in rag_chain.stream_answer(request.query, retrieved_docs, request.history, api_key=x_openai_api_key):
-            # Format as Server-Sent Events (SSE)
-            yield f"data: {chunk}\n\n"
+        # Extract text from payloads
+        retrieved_docs = []
+        citations = []
+        for res in search_results:
+            payload = res.payload or {}
+            text = payload.get("content", "")
+            retrieved_docs.append(text)
+            citations.append({
+                "score": res.score,
+                "text_snippet": text[:100] + "...",
+                "metadata": payload.get("metadata", {})
+            })
             
-        yield "data: [DONE]\n\n"
+        if not retrieved_docs:
+            retrieved_docs = ["No relevant context found in documents."]
 
-    return StreamingResponse(response_generator(), media_type="text/event-stream")
+        # 3. Stream LLM Response via LangChain
+        async def response_generator():
+            # Yield citations first as a metadata event
+            yield f"data: {{\"event\": \"citations\", \"data\": {citations}}}\n\n"
+            
+            async for chunk in rag_chain.stream_answer(request.query, retrieved_docs, request.history, api_key=x_openai_api_key):
+                # Format as Server-Sent Events (SSE)
+                yield f"data: {chunk}\n\n"
+                
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(response_generator(), media_type="text/event-stream")
+    except Exception as e:
+        logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
+        # Return a 500 but WITH the error string so we can see it in Vercel logs!
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=500, content={"error": "Internal Server Error", "detail": str(e), "type": str(type(e))})
 
 class RetrieveRequest(BaseModel):
     query: str
