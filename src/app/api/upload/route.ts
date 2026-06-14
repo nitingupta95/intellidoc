@@ -46,14 +46,16 @@ export async function POST(req: Request) {
     // 3. Trigger FastAPI Background Processing
     try {
       const userRecord = await prisma.user.findUnique({ where: { id: session.user.id } });
-      const userApiKey = userRecord?.openaiKey || process.env.OPENAI_API_KEY || "";
+      const userOpenAIKey = userRecord?.openaiKey || process.env.OPENAI_API_KEY || "";
+      const userGeminiKey = userRecord?.geminiKey || process.env.GEMINI_API_KEY || "";
 
       const aiUrl = env.AI_SERVICE_URL;
       await fetch(`${aiUrl}/api/v1/documents/process`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'X-OpenAI-API-Key': userApiKey
+          'X-OpenAI-API-Key': userOpenAIKey,
+          'X-Gemini-API-Key': userGeminiKey
         },
         body: JSON.stringify({
           document_id: dbRecord.data!.id,

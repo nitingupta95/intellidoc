@@ -43,6 +43,7 @@ model User {
   emailVerified DateTime?
   image         String?
   openaiKey     String?   @db.Text
+  geminiKey     String?   @db.Text
   notificationPrefs Json?
 
   // Subscription fields

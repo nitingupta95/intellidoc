@@ -28,10 +28,15 @@ export default function SettingsPage() {
   const [isImageUploading, setIsImageUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [apiKey, setApiKey] = useState("");
-  const [maskedKey, setMaskedKey] = useState<string | null>(null);
+  const [openApiKey, setOpenApiKey] = useState("");
+  const [maskedOpenApiKey, setMaskedOpenApiKey] = useState<string | null>(null);
+  
+  const [geminiKey, setGeminiKey] = useState("");
+  const [maskedGeminiKey, setMaskedGeminiKey] = useState<string | null>(null);
+  
   const [isKeyLoading, setIsKeyLoading] = useState(true);
-  const [isKeySaving, setIsKeySaving] = useState(false);
+  const [isOpenAiKeySaving, setIsOpenAiKeySaving] = useState(false);
+  const [isGeminiKeySaving, setIsGeminiKeySaving] = useState(false);
 
   // Security State
   const [currentPassword, setCurrentPassword] = useState("");
@@ -49,11 +54,12 @@ export default function SettingsPage() {
   const [isNotificationsSaving, setIsNotificationsSaving] = useState(false);
 
   useEffect(() => {
-    // Fetch API Key
+    // Fetch API Keys
     fetch("/api/user/key")
       .then(res => res.json())
       .then(data => {
-        if (data.hasKey) setMaskedKey(data.maskedKey);
+        if (data.hasOpenAIKey) setMaskedOpenApiKey(data.maskedOpenAIKey);
+        if (data.hasGeminiKey) setMaskedGeminiKey(data.maskedGeminiKey);
         setIsKeyLoading(false);
       })
       .catch(() => setIsKeyLoading(false));
@@ -164,45 +170,95 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveKey = async () => {
-    if (!apiKey) return;
-    setIsKeySaving(true);
+  const handleSaveOpenApiKey = async () => {
+    if (!openApiKey) return;
+    setIsOpenAiKeySaving(true);
     try {
       const res = await fetch("/api/user/key", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey })
+        body: JSON.stringify({ openaiKey: openApiKey })
       });
       const data = await res.json();
       if (data.success) {
-        setMaskedKey(apiKey.length > 8 ? `sk-...${apiKey.slice(-4)}` : "sk-...****");
-        setApiKey("");
-        toast.success("API Key saved successfully");
+        setMaskedOpenApiKey(openApiKey.length > 8 ? `sk-...${openApiKey.slice(-4)}` : "sk-...****");
+        setOpenApiKey("");
+        toast.success("OpenAI API Key saved successfully");
       } else {
-        toast.error(data.error || "Failed to save API Key");
+        toast.error(data.error || "Failed to save OpenAI API Key");
       }
     } catch (error: any) {
-      toast.error("Failed to save API Key: " + (error.message || "Unknown error"));
+      toast.error("Failed to save OpenAI API Key: " + (error.message || "Unknown error"));
     } finally {
-      setIsKeySaving(false);
+      setIsOpenAiKeySaving(false);
     }
   };
 
-  const handleRevokeKey = async () => {
-    setIsKeySaving(true);
+  const handleRevokeOpenApiKey = async () => {
+    setIsOpenAiKeySaving(true);
     try {
-      const res = await fetch("/api/user/key", { method: "DELETE" });
+      const res = await fetch("/api/user/key", { 
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "openai" })
+      });
       const data = await res.json();
       if (data.success) {
-        setMaskedKey(null);
-        toast.success("API Key revoked");
+        setMaskedOpenApiKey(null);
+        toast.success("OpenAI API Key revoked");
       } else {
-        toast.error(data.error || "Failed to revoke API Key");
+        toast.error(data.error || "Failed to revoke OpenAI API Key");
       }
     } catch (error: any) {
-      toast.error("Failed to revoke API Key: " + (error.message || "Unknown error"));
+      toast.error("Failed to revoke OpenAI API Key: " + (error.message || "Unknown error"));
     } finally {
-      setIsKeySaving(false);
+      setIsOpenAiKeySaving(false);
+    }
+  };
+
+  const handleSaveGeminiKey = async () => {
+    if (!geminiKey) return;
+    setIsGeminiKeySaving(true);
+    try {
+      const res = await fetch("/api/user/key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ geminiKey })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMaskedGeminiKey(geminiKey.length > 8 ? `...${geminiKey.slice(-4)}` : "...****");
+        setGeminiKey("");
+        toast.success("Gemini API Key saved successfully");
+      } else {
+        toast.error(data.error || "Failed to save Gemini API Key");
+      }
+    } catch (error: any) {
+      toast.error("Failed to save Gemini API Key: " + (error.message || "Unknown error"));
+    } finally {
+      setIsGeminiKeySaving(false);
+    }
+  };
+
+  const handleRevokeGeminiKey = async () => {
+    setIsGeminiKeySaving(true);
+    try {
+      const res = await fetch("/api/user/key", { 
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "gemini" })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMaskedGeminiKey(null);
+        toast.success("Gemini API Key revoked");
+      } else {
+        toast.error(data.error || "Failed to revoke Gemini API Key");
+      }
+    } catch (error: any) {
+      toast.error("Failed to revoke Gemini API Key: " + (error.message || "Unknown error"));
+    } finally {
+      setIsGeminiKeySaving(false);
     }
   };
 
@@ -516,33 +572,76 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   {isKeyLoading ? (
                     <p className="text-sm text-muted-foreground animate-pulse">Loading...</p>
-                  ) : maskedKey ? (
-                    <div className="p-4 rounded-lg bg-background/30 border border-border/50 flex justify-between items-center group">
-                      <div>
-                        <h4 className="font-medium text-sm">OpenAI API Key</h4>
-                        <p className="text-xs text-muted-foreground font-mono mt-1">{maskedKey}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" className="glass h-8" onClick={handleRevokeKey} disabled={isKeySaving}>
-                          {isKeySaving ? "Revoking..." : "Revoke"}
-                        </Button>
-                      </div>
-                    </div>
                   ) : (
-                    <div className="space-y-4">
-                      <p className="text-sm text-muted-foreground">You have not set an OpenAI API Key. Provide one to enable AI functionality.</p>
-                      <div className="flex flex-col gap-2 max-w-md">
-                        <label className="text-sm font-medium">OpenAI API Key</label>
-                        <input 
-                          type="password" 
-                          placeholder="sk-..." 
-                          value={apiKey}
-                          onChange={(e) => setApiKey(e.target.value)}
-                          className="w-full px-3 py-2 glass bg-background/50 border border-border/50 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm" 
-                        />
-                        <Button size="sm" className="w-fit mt-2" onClick={handleSaveKey} disabled={!apiKey || isKeySaving}>
-                          {isKeySaving ? "Saving..." : "Save Key"}
-                        </Button>
+                    <div className="space-y-6">
+                      {/* OpenAI Key Section */}
+                      <div>
+                        {maskedOpenApiKey ? (
+                          <div className="p-4 rounded-lg bg-background/30 border border-border/50 flex justify-between items-center group">
+                            <div>
+                              <h4 className="font-medium text-sm">OpenAI API Key</h4>
+                              <p className="text-xs text-muted-foreground font-mono mt-1">{maskedOpenApiKey}</p>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button variant="outline" size="sm" className="glass h-8" onClick={handleRevokeOpenApiKey} disabled={isOpenAiKeySaving}>
+                                {isOpenAiKeySaving ? "Revoking..." : "Revoke"}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            <p className="text-sm text-muted-foreground">You have not set an OpenAI API Key. Provide one to enable OpenAI functionality.</p>
+                            <div className="flex flex-col gap-2 max-w-md">
+                              <label className="text-sm font-medium">OpenAI API Key</label>
+                              <input 
+                                type="password" 
+                                placeholder="sk-..." 
+                                value={openApiKey}
+                                onChange={(e) => setOpenApiKey(e.target.value)}
+                                className="w-full px-3 py-2 glass bg-background/50 border border-border/50 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm" 
+                              />
+                              <Button size="sm" className="w-fit mt-2" onClick={handleSaveOpenApiKey} disabled={!openApiKey || isOpenAiKeySaving}>
+                                {isOpenAiKeySaving ? "Saving..." : "Save OpenAI Key"}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <hr className="border-border/50" />
+
+                      {/* Gemini Key Section */}
+                      <div>
+                        {maskedGeminiKey ? (
+                          <div className="p-4 rounded-lg bg-background/30 border border-border/50 flex justify-between items-center group">
+                            <div>
+                              <h4 className="font-medium text-sm">Gemini API Key</h4>
+                              <p className="text-xs text-muted-foreground font-mono mt-1">{maskedGeminiKey}</p>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button variant="outline" size="sm" className="glass h-8" onClick={handleRevokeGeminiKey} disabled={isGeminiKeySaving}>
+                                {isGeminiKeySaving ? "Revoking..." : "Revoke"}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            <p className="text-sm text-muted-foreground">You have not set a Gemini API Key. Provide one to enable Gemini AI functionality.</p>
+                            <div className="flex flex-col gap-2 max-w-md">
+                              <label className="text-sm font-medium">Gemini API Key</label>
+                              <input 
+                                type="password" 
+                                placeholder="AIza..." 
+                                value={geminiKey}
+                                onChange={(e) => setGeminiKey(e.target.value)}
+                                className="w-full px-3 py-2 glass bg-background/50 border border-border/50 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm" 
+                              />
+                              <Button size="sm" className="w-fit mt-2" onClick={handleSaveGeminiKey} disabled={!geminiKey || isGeminiKeySaving}>
+                                {isGeminiKeySaving ? "Saving..." : "Save Gemini Key"}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}

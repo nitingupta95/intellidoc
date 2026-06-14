@@ -20,10 +20,18 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "No data provided" }, { status: 400 });
     }
 
-    const updatedUser = await db.user.update({
-      where: { id: session.user.id },
-      data: updateData,
-    });
+    let updatedUser;
+    try {
+      updatedUser = await db.user.update({
+        where: { id: session.user.id },
+        data: updateData,
+      });
+    } catch (error: any) {
+      if (error.code === 'P2025') {
+        return NextResponse.json({ success: false, error: 'User not found in database. Please log out and log in again.' }, { status: 404 });
+      }
+      throw error;
+    }
 
     return NextResponse.json({ success: true, user: { name: updatedUser.name, image: updatedUser.image } });
   } catch (error) {

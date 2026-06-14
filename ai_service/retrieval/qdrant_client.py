@@ -7,13 +7,14 @@ from core.config import settings
 logger = logging.getLogger(__name__)
 
 class QdrantVectorStore:
-    def __init__(self, collection_name="documents"):
+    def __init__(self, collection_name="documents", dimension=1536):
         self.client = QdrantClient(
             url=settings.QDRANT_URL,
             port=443 if settings.QDRANT_URL.startswith("https") else 6333,
             api_key=settings.QDRANT_API_KEY if settings.QDRANT_API_KEY else None
         )
         self.collection_name = collection_name
+        self.dimension = dimension
         self._ensure_collection()
 
     def _ensure_collection(self):
@@ -22,9 +23,9 @@ class QdrantVectorStore:
             if not any(c.name == self.collection_name for c in collections):
                 self.client.create_collection(
                     collection_name=self.collection_name,
-                    vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
+                    vectors_config=VectorParams(size=self.dimension, distance=Distance.COSINE),
                 )
-                logger.info(f"Created Qdrant collection: {self.collection_name}")
+                logger.info(f"Created Qdrant collection: {self.collection_name} with dim {self.dimension}")
                 
             # Always ensure the payload index exists for document_id filtering
             try:

@@ -14,6 +14,10 @@ export async function GET() {
       select: { notificationPrefs: true }
     });
 
+    if (!user) {
+      return NextResponse.json({ success: false, error: "User not found in database. Please log out and log in again." }, { status: 404 });
+    }
+
     return NextResponse.json({ 
       success: true, 
       preferences: user?.notificationPrefs || null 
@@ -33,10 +37,17 @@ export async function POST(req: Request) {
 
     const body = await req.json();
 
-    await db.user.update({
-      where: { id: session.user.id },
-      data: { notificationPrefs: body.preferences }
-    });
+    try {
+      await db.user.update({
+        where: { id: session.user.id },
+        data: { notificationPrefs: body.preferences }
+      });
+    } catch (error: any) {
+      if (error.code === 'P2025') {
+        return NextResponse.json({ success: false, error: 'User not found in database. Please log out and log in again.' }, { status: 404 });
+      }
+      throw error;
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

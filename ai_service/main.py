@@ -40,15 +40,17 @@ app.add_middleware(
 parser = DocumentParser()
 chunker = SemanticChunker()
 embedding_svc = EmbeddingService()
-vector_store = None
+vector_stores = {}
 rag_chain = RAGChain()
 
-def get_vector_store():
-    global vector_store
-    if vector_store is None:
-        logger.info("Initializing Vector Store (lazy)...")
-        vector_store = QdrantVectorStore()
-    return vector_store
+def get_vector_store(provider: str = "openai", dimension: int = 1536):
+    global vector_stores
+    key = f"{provider}_{dimension}"
+    if key not in vector_stores:
+        collection_name = f"documents_{provider}"
+        logger.info(f"Initializing Vector Store for {collection_name} (dim {dimension})...")
+        vector_stores[key] = QdrantVectorStore(collection_name=collection_name, dimension=dimension)
+    return vector_stores[key]
 
 class ChatRequest(BaseModel):
     query: str
@@ -74,7 +76,7 @@ async def health_check():
     return {"status": "healthy", "service": settings.PROJECT_NAME}
 
 @app.post("/api/v1/chat")
-async def chat_endpoint(request: ChatRequest, x_openai_api_key: Optional[str] = Header(None)):
+async def chat_endpoint(request: ChatRequest, x_openai_api_key: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
     """
     RAG chat endpoint using SSE streaming.
     """
@@ -82,10 +84,14 @@ async def chat_endpoint(request: ChatRequest, x_openai_api_key: Optional[str] = 
     
     try:
         # 1. Embed query
-        query_vector = embedding_svc.embed_query(request.query, api_key=x_openai_api_key)
+        query_vector, provider, dim = embedding_svc.embed_query(
+            request.query, 
+            openai_api_key=x_openai_api_key, 
+            gemini_api_key=x_gemini_api_key
+        )
         
         # 2. Retrieve from Vector DB (Qdrant)
-        vs = get_vector_store()
+        vs = get_vector_store(provider=provider, dimension=dim)
         search_results = vs.search(
             query_vector=query_vector, 
             limit=5, 
@@ -113,7 +119,13 @@ async def chat_endpoint(request: ChatRequest, x_openai_api_key: Optional[str] = 
             # Yield citations first as a metadata event
             yield f"data: {{\"event\": \"citations\", \"data\": {citations}}}\n\n"
             
-            async for chunk in rag_chain.stream_answer(request.query, retrieved_docs, request.history, api_key=x_openai_api_key):
+            async for chunk in rag_chain.stream_answer(
+                request.query, 
+                retrieved_docs, 
+                request.history, 
+                openai_api_key=x_openai_api_key,
+                gemini_api_key=x_gemini_api_key
+            ):
                 # Format as Server-Sent Events (SSE)
                 yield f"data: {chunk}\n\n"
                 
@@ -132,17 +144,21 @@ class RetrieveRequest(BaseModel):
     limit: int = 5
 
 @app.post("/api/v1/retrieve")
-async def retrieve_endpoint(request: RetrieveRequest, x_openai_api_key: Optional[str] = Header(None)):
+async def retrieve_endpoint(request: RetrieveRequest, x_openai_api_key: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
     """
     Endpoint for Next.js to retrieve chunks from Qdrant.
     """
     logger.info(f"Retrieving chunks for query: {request.query}")
     
     # Embed query
-    query_vector = embedding_svc.embed_query(request.query, api_key=x_openai_api_key)
+    query_vector, provider, dim = embedding_svc.embed_query(
+        request.query, 
+        openai_api_key=x_openai_api_key,
+        gemini_api_key=x_gemini_api_key
+    )
     
     # Retrieve from Qdrant with filter
-    vs = get_vector_store()
+    vs = get_vector_store(provider=provider, dimension=dim)
     search_results = vs.search(
         query_vector=query_vector, 
         limit=request.limit, 
@@ -176,7 +192,7 @@ def update_document_status(document_id: str, data: dict):
     except Exception as e:
         logger.error(f"Failed to update document status in Next.js: {e}")
 
-def process_document_pipeline(file_path: str, document_id: str, metadata: dict, api_key: str = None):
+def process_document_pipeline(file_path: str, document_id: str, metadata: dict, openai_api_key: str = None, gemini_api_key: str = None):
     """Background task for parsing, chunking, and embedding."""
     try:
         update_document_status(document_id, {"status": "PROCESSING", "currentStep": "Downloading from MinIO", "progress": 10})
@@ -224,11 +240,15 @@ def process_document_pipeline(file_path: str, document_id: str, metadata: dict, 
         # 3. Embed
         update_document_status(document_id, {"currentStep": "Generating Embeddings", "progress": 70})
         texts = [c["content"] for c in chunks]
-        embeddings = embedding_svc.embed_documents(texts, api_key=api_key)
+        embeddings, provider, dim = embedding_svc.embed_documents(
+            texts, 
+            openai_api_key=openai_api_key, 
+            gemini_api_key=gemini_api_key
+        )
         
         # 4. Upsert to Qdrant
         update_document_status(document_id, {"currentStep": "Saving to Vector Store", "progress": 90})
-        vs = get_vector_store()
+        vs = get_vector_store(provider=provider, dimension=dim)
         vs.upsert_chunks(chunks, embeddings)
         logger.info(f"Upserted {len(chunks)} vectors to Qdrant for {document_id}")
         
@@ -238,7 +258,7 @@ def process_document_pipeline(file_path: str, document_id: str, metadata: dict, 
             "currentStep": "Complete", 
             "progress": 100,
             "chunkCount": len(chunks),
-            "embeddingModel": "all-MiniLM-L6-v2"
+            "embeddingModel": f"provider: {provider}, dim: {dim}"
         })
         
     except Exception as e:
@@ -249,7 +269,7 @@ def process_document_pipeline(file_path: str, document_id: str, metadata: dict, 
         })
 
 @app.post("/api/v1/documents/process")
-async def process_document(request: DocumentProcessRequest, bg_tasks: BackgroundTasks, x_openai_api_key: Optional[str] = Header(None)):
+async def process_document(request: DocumentProcessRequest, bg_tasks: BackgroundTasks, x_openai_api_key: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
     """
     Triggers the document processing pipeline asynchronously.
     """
@@ -259,7 +279,8 @@ async def process_document(request: DocumentProcessRequest, bg_tasks: Background
         request.file_path, 
         request.document_id, 
         request.metadata,
-        x_openai_api_key
+        x_openai_api_key,
+        x_gemini_api_key
     )
     return {"status": "processing_queued", "document_id": request.document_id}
 

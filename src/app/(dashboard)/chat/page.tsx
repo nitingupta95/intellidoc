@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { useConversationStore } from "@/store/conversation-store";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import Link from "next/link";
 
 function ChatContent() {
   const { messages, isGenerating, sendMessage, activeConversationId, conversations } = useConversationStore();
@@ -17,8 +18,10 @@ function ChatContent() {
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(true);
   const [kbs, setKbs] = useState<any[]>([]);
   const [selectedKb, setSelectedKb] = useState<string | null>(null);
+  const [hasKey, setHasKey] = useState<boolean | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const searchParams = useSearchParams();
+  const router = useRouter();
   const documentId = searchParams.get("documentId");
   const documentTitle = searchParams.get("documentTitle");
 
@@ -26,6 +29,13 @@ function ChatContent() {
     getKnowledgeBases().then(res => {
       if (res.success && res.data) setKbs(res.data);
     });
+    
+    fetch("/api/user/key")
+      .then(res => res.json())
+      .then(data => {
+        setHasKey(data.hasOpenAIKey || data.hasGeminiKey);
+      })
+      .catch(() => setHasKey(false));
   }, []);
 
   // Auto-scroll to bottom
@@ -140,7 +150,26 @@ function ChatContent() {
 
         {/* Chat Messages Area */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 scrollbar-thin">
-          {messages.length === 0 ? (
+          {hasKey === false ? (
+            <div className="flex flex-col items-center justify-center h-full text-center space-y-6 max-w-md mx-auto mt-10">
+              <div className="w-16 h-16 rounded-full bg-destructive/10 border border-destructive/20 flex items-center justify-center text-destructive mb-4">
+                <Info size={32} />
+              </div>
+              <h2 className="text-2xl font-heading font-semibold">API Key Required</h2>
+              <p className="text-muted-foreground text-sm">
+                You must provide an OpenAI or Gemini API Key to use the IntelliDoc Assistant. 
+                Please upload your API key in the settings tab to continue.
+              </p>
+              
+              <div className="mt-8">
+                <Link href="/settings">
+                  <Button className="w-full">
+                    Go to Settings
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          ) : messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-6 max-w-md mx-auto mt-10">
               <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary mb-4">
                 <MessageSquare size={32} />
@@ -213,7 +242,7 @@ function ChatContent() {
         <div className="p-3 md:p-4 border-t border-border/50 glass-panel shrink-0 pb-[calc(env(safe-area-inset-bottom)+12px)] md:pb-4">
           <div className="max-w-4xl mx-auto relative">
             <div className="bg-background/80 rounded-2xl border border-border/50 flex items-end p-1.5 md:p-2 focus-within:ring-2 focus-within:ring-primary/50 focus-within:border-primary/50 transition-all shadow-sm">
-              <Button variant="ghost" size="icon" className="rounded-full text-muted-foreground shrink-0 mb-0.5 md:mb-1 h-10 w-10">
+              <Button variant="ghost" size="icon" className="rounded-full text-muted-foreground shrink-0 mb-0.5 md:mb-1 h-10 w-10" disabled={hasKey === false}>
                 <Paperclip size={20} />
               </Button>
               
@@ -221,14 +250,15 @@ function ChatContent() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask a question..."
-                className="flex-1 bg-transparent border-none focus:ring-0 resize-none min-h-[44px] max-h-[150px] md:max-h-[200px] py-3 px-2 text-[16px] md:text-sm leading-relaxed placeholder:text-muted-foreground scrollbar-thin outline-none"
+                placeholder={hasKey === false ? "Please add an API key first..." : "Ask a question..."}
+                disabled={hasKey === false}
+                className="flex-1 bg-transparent border-none focus:ring-0 resize-none min-h-[44px] max-h-[150px] md:max-h-[200px] py-3 px-2 text-[16px] md:text-sm leading-relaxed placeholder:text-muted-foreground scrollbar-thin outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                 rows={1}
               />
               
               <Button 
                 onClick={handleSend} 
-                disabled={!input.trim() || isGenerating}
+                disabled={!input.trim() || isGenerating || hasKey === false}
                 size="icon" 
                 className="rounded-full shrink-0 mb-0.5 md:mb-1 h-10 w-10 transition-transform active:scale-95"
               >

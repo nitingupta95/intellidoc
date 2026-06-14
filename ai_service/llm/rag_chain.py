@@ -1,4 +1,5 @@
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
@@ -12,16 +13,31 @@ class RAGChain:
             ("human", "{question}")
         ])
 
-    def _get_chain(self, api_key: str = None):
-        key = api_key or settings.OPENAI_API_KEY
-        llm = ChatOpenAI(
-            model="gpt-4o", 
-            temperature=0,
-            openai_api_key=key
-        )
+    def _get_chain(self, openai_api_key: str = None, gemini_api_key: str = None):
+        if openai_api_key:
+            llm = ChatOpenAI(
+                model="gpt-4o", 
+                temperature=0,
+                openai_api_key=openai_api_key
+            )
+        elif gemini_api_key:
+            llm = ChatGoogleGenerativeAI(
+                model="gemini-1.5-pro",
+                temperature=0,
+                google_api_key=gemini_api_key
+            )
+        else:
+            # Fallback
+            key = settings.OPENAI_API_KEY
+            llm = ChatOpenAI(
+                model="gpt-4o", 
+                temperature=0,
+                openai_api_key=key
+            )
+            
         return self.prompt | llm | StrOutputParser()
 
-    async def stream_answer(self, question: str, retrieved_docs: list[str], history: list[dict] = None, api_key: str = None):
+    async def stream_answer(self, question: str, retrieved_docs: list[str], history: list[dict] = None, openai_api_key: str = None, gemini_api_key: str = None):
         """
         Streams the response back.
         """
@@ -36,7 +52,7 @@ class RAGChain:
                 elif msg.get("role") == "assistant":
                     lc_history.append(AIMessage(content=msg.get("content", "")))
 
-        chain = self._get_chain(api_key)
+        chain = self._get_chain(openai_api_key, gemini_api_key)
         async for chunk in chain.astream({"context": context_str, "history": lc_history, "question": question}):
             yield chunk
 

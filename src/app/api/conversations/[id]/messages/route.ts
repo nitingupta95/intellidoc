@@ -65,17 +65,25 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       }
     });
 
-    // Auto-generate title if this is the first message
-    if (conversation.title === 'New Chat') {
-      try {
+    // Touch conversation to update its 'updatedAt' field so it jumps to top
+    try {
+      if (conversation.title === 'New Chat') {
         const titleSnippet = message.substring(0, 30);
         await db.conversation.update({
           where: { id: params.id },
-          data: { title: titleSnippet + (message.length > 30 ? '...' : '') }
+          data: { 
+            title: titleSnippet + (message.length > 30 ? '...' : ''),
+            updatedAt: new Date()
+          }
         });
-      } catch (err) {
-        console.error('Failed to update title:', err);
+      } else {
+        await db.conversation.update({
+          where: { id: params.id },
+          data: { updatedAt: new Date() }
+        });
       }
+    } catch (err) {
+      console.error('Failed to touch conversation:', err);
     }
 
     // Get last 10 messages for context
@@ -111,11 +119,17 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     
     console.log("DEBUG: Final Document IDs being sent to Qdrant:", finalDocumentIds, "for KB:", metadata.knowledgeBaseId);
 
+    const userRecord = await db.user.findUnique({ where: { id: session.user.id } });
+    const userOpenAIKey = userRecord?.openaiKey || process.env.OPENAI_API_KEY || "";
+    const userGeminiKey = userRecord?.geminiKey || process.env.GEMINI_API_KEY || "";
+
     // Proxy stream to FastAPI
     const response = await fetch(`${API_BASE_URL}/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-OpenAI-API-Key': userOpenAIKey,
+        'X-Gemini-API-Key': userGeminiKey,
       },
       body: JSON.stringify({
         query: message,
