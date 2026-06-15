@@ -17,14 +17,11 @@ async def process_message(message: IncomingMessage):
             data = json.loads(body)
             document_id = data.get("documentId")
             minio_path = data.get("minioPath")
-            
-            # Here we would normally download the file from MinIO,
-            # but for Phase 2 we will just trigger the FastAPI internal pipeline.
-            # We assume MinIO is accessible internally.
+            workspace_id = data.get("workspaceId")
+            knowledge_base_id = data.get("knowledgeBaseId")
+            user_id = data.get("userId")
             
             # To actually process it in FastAPI, we'll POST to the local endpoint
-            # or directly import the pipeline function.
-            # Using HTTP POST to localhost:8000 is easiest to keep the event loop clean.
             
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -32,6 +29,9 @@ async def process_message(message: IncomingMessage):
                     json={
                         "document_id": document_id,
                         "file_path": minio_path,
+                        "workspace_id": workspace_id,
+                        "knowledge_base_id": knowledge_base_id,
+                        "uploaded_by": user_id,
                         "metadata": data
                     },
                     timeout=30.0

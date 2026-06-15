@@ -99,29 +99,24 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       content: msg.content
     }));
 
-    // Metadata from conversation (e.g. documentIds, knowledgeBaseId)
+    // Metadata from conversation
     const metadata = conversation.metadata as Record<string, any> || {};
-    
-    let finalDocumentIds = metadata.documentIds || null;
-    
-    if (metadata.knowledgeBaseId && !finalDocumentIds) {
-      const kbDocs = await db.document.findMany({
-        where: { knowledgeBaseId: metadata.knowledgeBaseId },
-        select: { id: true }
-      });
-      if (kbDocs.length > 0) {
-        finalDocumentIds = kbDocs.map((d: any) => d.id);
-      } else {
-        // Knowledge base has no documents, prevent it from searching the entire database
-        finalDocumentIds = ["__empty_kb__"];
-      }
-    }
-    
-    console.log("DEBUG: Final Document IDs being sent to Qdrant:", finalDocumentIds, "for KB:", metadata.knowledgeBaseId);
 
     const userRecord = await db.user.findUnique({ where: { id: session.user.id } });
     const userOpenAIKey = userRecord?.openaiKey || process.env.OPENAI_API_KEY || "";
     const userGeminiKey = userRecord?.geminiKey || process.env.GEMINI_API_KEY || "";
+
+    // Fetch document IDs to restrict search
+    let documentIds: string[] = [];
+    if (metadata.documentId) {
+      documentIds = [metadata.documentId];
+    } else if (conversation.knowledgeBaseId) {
+      const docs = await db.document.findMany({ where: { knowledgeBaseId: conversation.knowledgeBaseId }, select: { id: true } });
+      documentIds = docs.map(d => d.id);
+    } else {
+      const docs = await db.document.findMany({ where: { workspaceId: conversation.workspaceId }, select: { id: true } });
+      documentIds = docs.map(d => d.id);
+    }
 
     // Proxy stream to FastAPI
     const response = await fetch(`${API_BASE_URL}/chat`, {
@@ -133,9 +128,10 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       },
       body: JSON.stringify({
         query: message,
+        workspace_id: conversation.workspaceId,
+        knowledge_base_id: conversation.knowledgeBaseId || null,
+        document_ids: documentIds,
         history: formattedHistory,
-        document_ids: finalDocumentIds,
-        knowledge_base_id: metadata.knowledgeBaseId || null,
       }),
     });
 

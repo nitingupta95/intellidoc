@@ -28,9 +28,11 @@ import {
 import { toast } from "sonner";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useWorkspaceStore } from "@/store/workspace-store";
 
 export default function DocumentsPage() {
   const router = useRouter();
+  const { activeWorkspaceId } = useWorkspaceStore();
   const [isUploading, setIsUploading] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [documents, setDocuments] = useState<any[]>([]);
@@ -38,11 +40,25 @@ export default function DocumentsPage() {
   const [documentToDelete, setDocumentToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [kbs, setKbs] = useState<any[]>([]);
+  const [selectedKb, setSelectedKb] = useState<string>("");
+
+  useEffect(() => {
+    if (activeWorkspaceId) {
+      fetch(`/api/knowledge-bases?workspaceId=${activeWorkspaceId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.knowledgeBases) setKbs(data.knowledgeBases);
+        })
+        .catch(console.error);
+    }
+  }, [activeWorkspaceId]);
 
   const fetchDocuments = async (silent = false) => {
+    if (!activeWorkspaceId) return;
     try {
       if (!silent) setLoadingDocs(true);
-      const res = await fetch("/api/documents");
+      const res = await fetch(`/api/documents?workspaceId=${activeWorkspaceId}`);
       const data = await res.json();
       if (data.documents) {
         setDocuments(data.documents);
@@ -55,8 +71,12 @@ export default function DocumentsPage() {
   };
 
   useEffect(() => {
-    fetchDocuments();
-  }, []);
+    if (activeWorkspaceId) {
+      fetchDocuments();
+    } else {
+      setDocuments([]);
+    }
+  }, [activeWorkspaceId]);
 
   useEffect(() => {
     // Check if any documents are currently processing
@@ -99,8 +119,14 @@ export default function DocumentsPage() {
       
       const formData = new FormData();
       formData.append("file", file);
+      if (activeWorkspaceId) {
+        formData.append("workspaceId", activeWorkspaceId);
+      }
+      if (selectedKb) {
+        formData.append("knowledgeBaseId", selectedKb);
+      }
       
-      const res = await fetch("/api/documents/upload", {
+      const res = await fetch("/api/upload", {
         method: "POST",
         body: formData,
       });
@@ -169,7 +195,19 @@ export default function DocumentsPage() {
             className="w-full pl-9 pr-4 py-2 glass bg-background/50 border border-border/50 rounded-full focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {kbs.length > 0 && (
+            <select 
+              className="glass bg-background/50 border border-border/50 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              value={selectedKb}
+              onChange={(e) => setSelectedKb(e.target.value)}
+            >
+              <option value="">Upload to Workspace (No KB)</option>
+              {kbs.map((kb) => (
+                <option key={kb.id} value={kb.id}>{kb.name}</option>
+              ))}
+            </select>
+          )}
           <Button variant="outline" className="glass rounded-full text-sm font-medium">
             <Filter className="mr-2 h-4 w-4" />
             Filter
@@ -285,6 +323,7 @@ export default function DocumentsPage() {
                 <th className="px-6 py-4 font-medium text-muted-foreground">Name</th>
                 <th className="px-6 py-4 font-medium text-muted-foreground">Type</th>
                 <th className="px-6 py-4 font-medium text-muted-foreground">Size</th>
+                <th className="px-6 py-4 font-medium text-muted-foreground">Uploaded By</th>
                 <th className="px-6 py-4 font-medium text-muted-foreground">Status</th>
                 <th className="px-6 py-4 font-medium text-muted-foreground">Uploaded</th>
                 <th className="px-6 py-4 font-medium text-muted-foreground text-right">Actions</th>
@@ -305,6 +344,7 @@ export default function DocumentsPage() {
                   </td>
                   <td className="px-6 py-4 text-muted-foreground truncate max-w-[150px]">{formatMimeType(doc.mimeType)}</td>
                   <td className="px-6 py-4 text-muted-foreground">{(doc.fileSize / 1024 / 1024).toFixed(2)} MB</td>
+                  <td className="px-6 py-4 text-muted-foreground">{doc.user?.name || "Unknown"}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       {doc.status === 'INDEXED' ? (

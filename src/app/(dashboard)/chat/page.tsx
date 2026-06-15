@@ -2,8 +2,6 @@
 
 import { useState, useRef, useEffect } from "react";
 import { MessageSquare, Send, BrainCircuit, Info, User, Loader2, Menu, Database, ChevronDown } from "lucide-react";
-import { getKnowledgeBases } from "@/actions/knowledge-bases";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { useConversationStore } from "@/store/conversation-store";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
@@ -11,25 +9,36 @@ import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import Link from "next/link";
+import { useWorkspaceStore } from "@/store/workspace-store";
 
 function ChatContent() {
   const { messages, isGenerating, sendMessage, activeConversationId, conversations } = useConversationStore();
+  const { activeWorkspaceId } = useWorkspaceStore();
   const [input, setInput] = useState("");
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(true);
-  const [kbs, setKbs] = useState<any[]>([]);
-  const [selectedKb, setSelectedKb] = useState<string | null>(null);
   const [hasKey, setHasKey] = useState<boolean | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const searchParams = useSearchParams();
   const router = useRouter();
-  const documentId = searchParams.get("documentId");
-  const documentTitle = searchParams.get("documentTitle");
+  
+  const [kbs, setKbs] = useState<any[]>([]);
+  const [selectedKbId, setSelectedKbId] = useState<string>("");
+  
+  const activeConversation = conversations.find(c => c.id === activeConversationId);
+  const currentKbId = activeConversation?.knowledgeBaseId || selectedKbId;
 
   useEffect(() => {
-    getKnowledgeBases().then(res => {
-      if (res.success && res.data) setKbs(res.data);
-    });
-    
+    if (activeWorkspaceId) {
+      fetch(`/api/knowledge-bases?workspaceId=${activeWorkspaceId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.knowledgeBases) setKbs(data.knowledgeBases);
+        })
+        .catch(console.error);
+    }
+  }, [activeWorkspaceId]);
+
+  useEffect(() => {
     fetch("/api/user/key")
       .then(res => res.json())
       .then(data => {
@@ -44,15 +53,12 @@ function ChatContent() {
   }, [messages, isGenerating]);
 
   const handleSend = async () => {
-    if (!input.trim() || isGenerating) return;
+    if (!input.trim() || isGenerating || !activeWorkspaceId) return;
     const userMsg = input;
     setInput("");
     
-    if (documentId && !activeConversationId) {
-      await sendMessage(userMsg, null, [documentId]);
-    } else {
-      await sendMessage(userMsg, selectedKb);
-    }
+    const docId = searchParams?.get("documentId") || undefined;
+    await sendMessage(userMsg, activeWorkspaceId, currentKbId || undefined, docId);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -103,44 +109,19 @@ function ChatContent() {
           </div>
           
           <div className="flex items-center gap-1 md:gap-2 shrink-0">
-            {(() => {
-              const activeConv = conversations.find(c => c.id === activeConversationId);
-              const isExisting = !!activeConversationId;
-              const displayKbId = isExisting ? (activeConv?.metadata?.knowledgeBaseId || null) : selectedKb;
-              const displayDocIds = isExisting ? (activeConv?.metadata?.documentIds || null) : (documentId ? [documentId] : null);
-              
-              let label = "All Documents";
-              if (displayDocIds && displayDocIds.length > 0) {
-                 label = documentTitle ? `Doc: ${documentTitle}` : "Specific Document";
-              } else {
-                const displayKb = kbs.find(kb => kb.id === displayKbId);
-                if (displayKb) label = displayKb.name;
-              }
-
-              return (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild disabled={isExisting}>
-                    <Button variant="outline" size="sm" className="hidden sm:flex items-center gap-2 border-border/50 bg-background/50 text-xs text-muted-foreground hover:text-foreground">
-                      <Database size={14} className="text-primary shrink-0" />
-                      <span className="truncate max-w-[150px]">{label}</span>
-                      {!isExisting && <ChevronDown size={14} className="opacity-50 shrink-0" />}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuItem onClick={() => setSelectedKb(null)} className={`cursor-pointer ${!selectedKb ? "bg-primary/10" : ""}`}>
-                      <Database size={14} className="mr-2 opacity-50" />
-                      All Documents
-                    </DropdownMenuItem>
-                    {kbs.map(kb => (
-                      <DropdownMenuItem key={kb.id} onClick={() => setSelectedKb(kb.id)} className={`cursor-pointer ${selectedKb === kb.id ? "bg-primary/10" : ""}`}>
-                        <Database size={14} className="mr-2 text-primary" />
-                        {kb.name}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              );
-            })()}
+            {kbs.length > 0 && (
+              <select 
+                className="flex glass bg-background/50 border border-border/50 rounded-full px-2 sm:px-3 py-1.5 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 max-w-[120px] sm:max-w-[200px]"
+                value={currentKbId || ""}
+                onChange={(e) => setSelectedKbId(e.target.value)}
+                disabled={!!activeConversationId} // Lock to conversation's KB once created
+              >
+                <option value="">All Workspace Documents</option>
+                {kbs.map((kb) => (
+                  <option key={kb.id} value={kb.id}>{kb.name}</option>
+                ))}
+              </select>
+            )}
 
             <Button variant="ghost" size="icon" className="text-muted-foreground">
               <Info size={20} />

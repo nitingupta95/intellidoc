@@ -11,8 +11,15 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { searchParams } = new URL(req.url);
+    const workspaceId = searchParams.get('workspaceId');
+
+    if (!workspaceId) {
+      return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 });
+    }
+
     const conversations = await db.conversation.findMany({
-      where: { userId: session.user.id },
+      where: { userId: session.user.id, workspaceId },
       orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
@@ -22,6 +29,7 @@ export async function GET(req: Request) {
         isPinned: true,
         isArchived: true,
         metadata: true,
+        knowledgeBaseId: true,
         // Include last message snippet for sidebar
         messages: {
           orderBy: { createdAt: 'desc' },
@@ -51,12 +59,26 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { title = 'New Chat', metadata = {} } = body;
+    const { title = 'New Chat', workspaceId, knowledgeBaseId, metadata = {} } = body;
+
+    if (!workspaceId) {
+      return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 });
+    }
+
+    const membership = await db.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: session.user.id } }
+    });
+
+    if (!membership) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const conversation = await db.conversation.create({
       data: {
         title,
         userId: session.user.id,
+        workspaceId,
+        knowledgeBaseId: knowledgeBaseId || null,
         metadata,
       }
     });

@@ -4,6 +4,7 @@ import { createDocumentRecord } from "@/actions/documents";
 import { auth } from "@/auth";
 import { env } from '../../../env';
 import { prisma } from "@/lib/db";
+import { publishDocumentJob } from "@/lib/rabbitmq";
 
 export async function POST(req: Request) {
   try {
@@ -14,9 +15,14 @@ export async function POST(req: Request) {
 
     const formData = await req.formData();
     const file = formData.get("file") as File;
+    const workspaceId = formData.get("workspaceId") as string;
+    const knowledgeBaseId = formData.get("knowledgeBaseId") as string | null;
     
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    }
+    if (!workspaceId) {
+      return NextResponse.json({ error: "No workspaceId provided" }, { status: 400 });
     }
 
     // Convert Web File to Node.js Buffer for S3 SDK
@@ -36,39 +42,28 @@ export async function POST(req: Request) {
       storageKey: uniqueFileName,
       fileSize: file.size,
       mimeType: file.type,
-      userId: session.user.id,
+      uploadedBy: session.user.id,
+      workspaceId,
+      knowledgeBaseId,
     });
 
     if (!dbRecord.success) {
       throw new Error("Failed to save to database");
     }
 
-    // 3. Trigger FastAPI Background Processing
+    // 3. Trigger RabbitMQ Job
     try {
-      const userRecord = await prisma.user.findUnique({ where: { id: session.user.id } });
-      const userOpenAIKey = userRecord?.openaiKey || process.env.OPENAI_API_KEY || "";
-      const userGeminiKey = userRecord?.geminiKey || process.env.GEMINI_API_KEY || "";
-
-      const aiUrl = env.AI_SERVICE_URL;
-      await fetch(`${aiUrl}/api/v1/documents/process`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-OpenAI-API-Key': userOpenAIKey,
-          'X-Gemini-API-Key': userGeminiKey
-        },
-        body: JSON.stringify({
-          document_id: dbRecord.data!.id,
-          file_path: `minio://${process.env.S3_BUCKET_NAME || "intellidoc-documents"}/${uniqueFileName}`,
-          metadata: {
-            title: dbRecord.data!.title,
-            userId: session.user.id
-          }
-        })
-      });
-    } catch (aiError) {
-      console.error("FastAPI triggered failed (is docker running?):", aiError);
-      // We don't fail the upload if AI is temporarily down, just log it.
+      const minioPath = `minio://${process.env.S3_BUCKET_NAME || "intellidoc-documents"}/${uniqueFileName}`;
+      await publishDocumentJob(
+        dbRecord.data!.id,
+        minioPath,
+        session.user.id,
+        workspaceId,
+        knowledgeBaseId || null
+      );
+    } catch (mqError) {
+      console.error("Failed to push job to RabbitMQ:", mqError);
+      // We don't fail the upload if MQ is temporarily down, just log it.
     }
 
     return NextResponse.json({ 

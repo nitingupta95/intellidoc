@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Files, MessageSquare, Database, Settings } from "lucide-react";
+import { LayoutDashboard, Files, MessageSquare, Settings, Database } from "lucide-react";
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -10,8 +10,8 @@ export function BottomNav() {
   const navItems = [
     { href: "/dashboard", icon: <LayoutDashboard size={24} />, label: "Home" },
     { href: "/documents", icon: <Files size={24} />, label: "Files" },
+    { href: "/knowledge-bases", icon: <Database size={24} />, label: "KBs" },
     { href: "/chat", icon: <MessageSquare size={24} />, label: "Chat" },
-    { href: "/knowledge-bases", icon: <Database size={24} />, label: "KB" },
     { href: "/settings", icon: <Settings size={24} />, label: "Settings" },
   ];
 

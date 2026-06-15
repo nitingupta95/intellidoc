@@ -56,7 +56,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
-    if (document.userId !== session.user.id) {
+    if (document.uploadedBy !== session.user.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

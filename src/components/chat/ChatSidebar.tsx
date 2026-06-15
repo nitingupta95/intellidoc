@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useConversationStore } from "@/store/conversation-store";
+import { useWorkspaceStore } from "@/store/workspace-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MessageSquarePlus, Search, MoreVertical, Trash2, Edit2, Pin, Archive, Loader2 } from "lucide-react";
@@ -30,6 +31,8 @@ export function ChatSidebar({ className }: { className?: string }) {
     isLoading
   } = useConversationStore();
   
+  const { activeWorkspaceId } = useWorkspaceStore();
+  
   const [search, setSearch] = useState("");
   const [isRenaming, setIsRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -37,8 +40,10 @@ export function ChatSidebar({ className }: { className?: string }) {
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    loadConversations();
-  }, [loadConversations]);
+    if (activeWorkspaceId) {
+      loadConversations(activeWorkspaceId);
+    }
+  }, [loadConversations, activeWorkspaceId]);
 
   const handleNewChat = async () => {
     setActiveConversation(null);

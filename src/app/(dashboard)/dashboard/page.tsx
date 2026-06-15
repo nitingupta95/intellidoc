@@ -21,22 +21,22 @@ export default async function DashboardPage() {
 
   // 1. Total Documents
   const totalDocuments = await db.document.count({
-    where: { userId },
+    where: { workspace: { members: { some: { userId } } } },
   });
 
   // 2. AI Queries
   const aiQueries = await db.message.count({
     where: {
-      role: "USER",
-      conversation: { userId },
+      role: "user",
+      conversation: { workspace: { members: { some: { userId } } } },
     },
   });
 
   // 3. Avg Confidence
   const assistantMessages = await db.message.findMany({
     where: {
-      role: "ASSISTANT",
-      conversation: { userId },
+      role: "assistant",
+      conversation: { workspace: { members: { some: { userId } } } },
       confidence: { not: null },
     },
     select: { confidence: true },
@@ -54,14 +54,14 @@ export default async function DashboardPage() {
 
   // 5. Recent Knowledge Activity
   const recentDocs = await db.document.findMany({
-    where: { userId },
+    where: { workspace: { members: { some: { userId } } } },
     orderBy: { createdAt: "desc" },
     take: 5,
     select: { id: true, filename: true, createdAt: true },
   });
 
   const recentConvos = await db.conversation.findMany({
-    where: { userId },
+    where: { workspace: { members: { some: { userId } } } },
     orderBy: { createdAt: "desc" },
     take: 5,
     select: { id: true, title: true, createdAt: true },

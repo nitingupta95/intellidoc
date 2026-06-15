@@ -14,7 +14,7 @@ export async function POST(req: Request) {
 
     const formData = await req.formData();
     const file = formData.get('file') as File;
-    const knowledgeBaseId = formData.get('knowledgeBaseId') as string | null;
+    const workspaceId = formData.get('workspaceId') as string;
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -37,13 +37,13 @@ export async function POST(req: Request) {
         mimeType: file.type || 'application/octet-stream',
         storageKey: uniqueFileName,
         status: 'UPLOADED',
-        userId: session.user.id,
-        knowledgeBaseId: knowledgeBaseId || null
+        uploadedBy: session.user.id,
+        workspaceId: workspaceId
       }
     });
 
     // 3. Publish to RabbitMQ
-    await publishDocumentJob(document.id, uniqueFileName, session.user.id);
+    await publishDocumentJob(document.id, uniqueFileName, session.user.id, workspaceId);
 
     return NextResponse.json({ success: true, document });
   } catch (error: any) {

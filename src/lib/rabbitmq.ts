@@ -24,12 +24,14 @@ export async function getRabbitChannel(): Promise<Channel> {
   }
 }
 
-export async function publishDocumentJob(documentId: string, minioPath: string, userId: string) {
+export async function publishDocumentJob(documentId: string, minioPath: string, userId: string, workspaceId: string, knowledgeBaseId: string | null = null) {
   const ch = await getRabbitChannel();
   const msg = JSON.stringify({
     documentId,
     minioPath,
     userId,
+    workspaceId,
+    knowledgeBaseId,
     timestamp: new Date().toISOString()
   });
 
