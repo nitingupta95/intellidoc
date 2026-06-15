@@ -24,6 +24,13 @@ IntelliDoc AI lets you upload documents, semantically search across them, and ha
 - **🔍 Semantic Search** — Find meaning across your entire document repository using vector similarity, not just keyword matching.
 - **📚 Knowledge Bases** — Organize documents into Knowledge Bases for team-scoped conversations and retrieval.
 
+### 🤝 Team Workspaces & Collaboration
+IntelliDoc is built from the ground up for multi-tenant team collaboration. The entire application is scoped around **Workspaces**:
+- **Role-Based Access Control (RBAC)** — Assign `OWNER` or `MEMBER` roles to granularly control who can invite users, manage billing, or modify knowledge bases.
+- **Secure Invitations** — Send secure email invitations or generate shareable invite links for rapid team onboarding.
+- **Isolated Data Silos** — Every workspace acts as a strict tenant boundary. Documents, conversations, and vectors never leak across workspaces.
+- **Shared Knowledge** — Upload documents and organize them into shared Knowledge Bases that any workspace member can query and interact with.
+
 ### Platform
 - **🔐 Multi-Provider Auth** — Sign in with Google, GitHub, or email/password credentials via NextAuth v5.
 - **💳 Subscription & Payments** — Integrated Razorpay payment gateway with Free, Pro, and Enterprise tiers.
@@ -228,7 +235,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 docker compose up -d
 ```
 
-This starts PostgreSQL, Redis, RabbitMQ, MinIO, Qdrant, and Neo4j.
+This starts PostgreSQL, Redis, RabbitMQ, MinIO, and Qdrant.
 
 ### 4. Set Up the Frontend
 
@@ -387,7 +394,7 @@ The application uses **15 Prisma models** across these domains:
 | **Auth** | `User`, `Account`, `Session`, `VerificationToken` |
 | **Documents** | `Document`, `Chunk`, `KnowledgeBase` |
 | **Chat** | `Conversation`, `Message`, `Citation`, `MessageFeedback` |
-| **Teams** | `Team`, `TeamMember` |
+| **Workspaces** | `Workspace`, `WorkspaceMember`, `Invitation` |
 | **Payments** | `Payment`, `Subscription`, `WebhookEvent` |
 
 Key relationships:

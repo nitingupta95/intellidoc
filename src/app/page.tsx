@@ -4,17 +4,17 @@ import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Search, BrainCircuit, Share2, ArrowRight, Sun, Moon } from "lucide-react";
+import { Search, BrainCircuit, Users, ArrowRight, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-function KnowledgeGraphShowcase() {
+function WorkspaceShowcase() {
   const nodes = [
-    { id: 'center', label: 'Master Service Agreement', x: '50%', y: '50%', type: 'primary', delay: 0 },
-    { id: 'client', label: 'Client: Acme Corp', x: '20%', y: '30%', type: 'secondary', delay: 0.2 },
-    { id: 'vendor', label: 'Vendor: TechSolutions', x: '80%', y: '25%', type: 'secondary', delay: 0.4 },
-    { id: 'terms', label: 'Terms: Net 30', x: '75%', y: '75%', type: 'secondary', delay: 0.6 },
-    { id: 'compliance', label: 'Compliance: SOC2', x: '25%', y: '70%', type: 'secondary', delay: 0.8 },
-    { id: 'risk', label: 'Risk: High Liability', x: '85%', y: '50%', type: 'alert', delay: 1 },
+    { id: 'center', label: 'Workspace: Acme Corp', x: '50%', y: '50%', type: 'primary', delay: 0 },
+    { id: 'member1', label: 'Alice (Owner)', x: '20%', y: '30%', type: 'secondary', delay: 0.2 },
+    { id: 'member2', label: 'Bob (Admin)', x: '80%', y: '25%', type: 'secondary', delay: 0.4 },
+    { id: 'kb1', label: 'KB: Engineering Docs', x: '75%', y: '75%', type: 'secondary', delay: 0.6 },
+    { id: 'kb2', label: 'KB: HR Policies', x: '25%', y: '70%', type: 'secondary', delay: 0.8 },
+    { id: 'doc', label: 'Document: Q3 Roadmap', x: '85%', y: '50%', type: 'alert', delay: 1 },
   ];
 
   const lines = [
@@ -29,7 +29,7 @@ function KnowledgeGraphShowcase() {
 
   return (
     <div className="mt-40 w-full max-w-5xl mx-auto flex flex-col items-center">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-100px" }}
@@ -37,14 +37,14 @@ function KnowledgeGraphShowcase() {
         className="text-center mb-16"
       >
         <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-gray-900 dark:text-white mb-4">
-          Knowledge, Interconnected.
+          Collaboration, Simplified.
         </h2>
         <p className="text-gray-500 dark:text-gray-50 max-w-2xl mx-auto">
-          IntelliDoc automatically discovers and maps relationships between entities across your entire document repository.
+          IntelliDoc allows you to create isolated workspaces, invite team members, and manage shared knowledge bases securely.
         </p>
       </motion.div>
 
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-100px" }}
@@ -110,13 +110,12 @@ function KnowledgeGraphShowcase() {
               <motion.div
                 animate={{ y: [0, -8, 0] }}
                 transition={{ duration: 4 + Math.random() * 2, repeat: Infinity, ease: "easeInOut", delay: node.delay }}
-                className={`px-4 py-2.5 rounded-full text-xs sm:text-sm font-medium backdrop-blur-md border shadow-lg whitespace-nowrap transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer ${
-                  node.type === 'primary' 
-                    ? 'bg-black text-white border-black/20 dark:bg-white dark:text-black dark:border-white/20 shadow-black/20 dark:shadow-white/20' 
+                className={`px-4 py-2.5 rounded-full text-xs sm:text-sm font-medium backdrop-blur-md border shadow-lg whitespace-nowrap transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer ${node.type === 'primary'
+                    ? 'bg-black text-white border-black/20 dark:bg-white dark:text-black dark:border-white/20 shadow-black/20 dark:shadow-white/20'
                     : node.type === 'alert'
-                    ? 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/50'
-                    : 'bg-white/80 dark:bg-[#050505]/80 text-gray-700 dark:text-gray-50 border-black/10 dark:border-white/10'
-                }`}
+                      ? 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/50'
+                      : 'bg-white/80 dark:bg-[#050505]/80 text-gray-700 dark:text-gray-50 border-black/10 dark:border-white/10'
+                  }`}
               >
                 {node.label}
               </motion.div>
@@ -148,9 +147,9 @@ export default function Home() {
       description: "Receive verifiable answers with pinpoint source citations and confidence scores.",
     },
     {
-      icon: <Share2 className="w-5 h-5 text-gray-700 dark:text-gray-50" />,
-      title: "Knowledge Graphs",
-      description: "Automatically map and visualize hidden relationships and entities in your data.",
+      icon: <Users className="w-5 h-5 text-gray-700 dark:text-gray-50" />,
+      title: "Team Workspaces",
+      description: "Collaborate seamlessly. Invite members, manage roles, and share knowledge bases securely.",
     }
   ];
 
@@ -158,10 +157,10 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-[#050505] text-gray-900 dark:text-[#FAFAFA] font-sans selection:bg-black/10 dark:selection:bg-white/20 overflow-x-hidden relative transition-colors duration-500">
-      
+
       {/* Subtle Grid Pattern */}
       <div className="absolute inset-0 z-0 bg-[linear-gradient(to_right,#0000000a_1px,transparent_1px),linear-gradient(to_bottom,#0000000a_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:32px_32px]" />
-      
+
       {/* Soft Radial Glow */}
       <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-black/[0.03] dark:bg-white/[0.03] rounded-full blur-[120px] pointer-events-none z-0" />
 
@@ -176,7 +175,7 @@ export default function Home() {
           </div>
           <nav className="flex items-center gap-6 text-sm">
             {mounted && (
-              <button 
+              <button
                 onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
                 className="text-gray-500 hover:text-gray-900 dark:text-gray-50 dark:hover:text-white transition-colors cursor-pointer"
               >
@@ -195,9 +194,9 @@ export default function Home() {
 
       {/* Main Hero Content */}
       <main className="relative z-10 max-w-5xl mx-auto px-6 pt-48 pb-32 flex flex-col items-center justify-center text-center">
-        
+
         {/* Status Pill */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
@@ -208,7 +207,7 @@ export default function Home() {
         </motion.div>
 
         {/* Headline */}
-        <motion.h1 
+        <motion.h1
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
@@ -218,7 +217,7 @@ export default function Home() {
         </motion.h1>
 
         {/* Subheadline */}
-        <motion.p 
+        <motion.p
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
@@ -228,7 +227,7 @@ export default function Home() {
         </motion.p>
 
         {/* CTAs */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
@@ -247,7 +246,7 @@ export default function Home() {
         </motion.div>
 
         {/* Trust Logos */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 1, delay: 0.8 }}
@@ -283,8 +282,8 @@ export default function Home() {
           ))}
         </div>
 
-        {/* KNOWLEDGE GRAPH SHOWCASE */}
-        <KnowledgeGraphShowcase />
+        {/* WORKSPACE SHOWCASE */}
+        <WorkspaceShowcase />
 
       </main>
 
