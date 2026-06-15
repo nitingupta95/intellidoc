@@ -291,10 +291,11 @@ export default function Home() {
       <footer className="relative z-10 border-t border-black/5 dark:border-white/5 py-8 text-center text-xs text-gray-400 dark:text-gray-50">
         <div className="max-w-5xl mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-4">
           <span>© {new Date().getFullYear()} IntelliDoc AI. All rights reserved.</span>
-          <div className="flex items-center gap-6">
-            <Link href="#" className="hover:text-gray-900 dark:hover:text-white/60 transition-colors">Twitter</Link>
-            <Link href="#" className="hover:text-gray-900 dark:hover:text-white/60 transition-colors">GitHub</Link>
-            <Link href="#" className="hover:text-gray-900 dark:hover:text-white/60 transition-colors">Contact</Link>
+          <div className="flex flex-wrap justify-center items-center gap-6">
+            <Link href="/privacy" className="hover:text-gray-900 dark:hover:text-white/60 transition-colors">Privacy</Link>
+            <Link href="/terms" className="hover:text-gray-900 dark:hover:text-white/60 transition-colors">Terms</Link> 
+            <Link href="https://github.com/nitingupta95/intellidoc" target="_blank" rel="noopener noreferrer" className="hover:text-gray-900 dark:hover:text-white/60 transition-colors">GitHub</Link>
+            <Link href="/contact" className="hover:text-gray-900 dark:hover:text-white/60 transition-colors">Contact</Link>
           </div>
         </div>
       </footer>

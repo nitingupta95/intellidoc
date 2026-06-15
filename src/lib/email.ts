@@ -148,5 +148,76 @@ export const emailService = {
       console.error('Error sending workspace invite email:', error);
       throw new Error('Failed to send workspace invite email');
     }
+  },
+
+  sendContactForm: async (name: string, email: string, message: string): Promise<void> => {
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || '"IntelliDoc AI" <noreply@intellidoc.ai>',
+      to: process.env.OWNER_EMAIL || process.env.SMTP_USER || process.env.EMAIL_FROM || '"IntelliDoc AI Support" <support@intellidoc.ai>',
+      replyTo: email,
+      subject: `New Contact Form Submission from ${name}`,
+      text: `Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>New Contact Form Submission</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #fafafa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+          <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#fafafa">
+            <tr>
+              <td align="center" style="padding: 40px 0;">
+                <table width="100%" max-width="600" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #ffffff; border: 1px solid #eaeaea; border-radius: 8px; margin: 0 auto; text-align: left;">
+                  <tr>
+                    <td style="padding: 40px;">
+                      <h1 style="color: #111827; font-size: 24px; font-weight: 600; margin: 0 0 16px 0; padding: 0;">New Contact Submission</h1>
+                      
+                      <p style="color: #4b5563; font-size: 16px; line-height: 24px; margin: 0 0 24px 0;">
+                        You have received a new message from the IntelliDoc AI contact form.
+                      </p>
+                      
+                      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 24px; border: 1px solid #eaeaea; border-radius: 6px;">
+                        <tr>
+                          <td style="padding: 16px; border-bottom: 1px solid #eaeaea;">
+                            <strong style="color: #111827; font-size: 14px;">Name:</strong><br/>
+                            <span style="color: #4b5563; font-size: 14px;">${name}</span>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 16px;">
+                            <strong style="color: #111827; font-size: 14px;">Email:</strong><br/>
+                            <a href="mailto:${email}" style="color: #2563eb; font-size: 14px; text-decoration: none;">${email}</a>
+                          </td>
+                        </tr>
+                      </table>
+                      
+                      <h2 style="color: #111827; font-size: 16px; font-weight: 600; margin: 0 0 12px 0;">Message</h2>
+                      
+                      <div style="background-color: #f9fafb; border: 1px solid #eaeaea; border-radius: 6px; padding: 16px; color: #374151; font-size: 14px; line-height: 22px; white-space: pre-wrap;">${message}</div>
+                    </td>
+                  </tr>
+                </table>
+                <p style="text-align: center; color: #9ca3af; font-size: 12px; margin-top: 24px;">
+                  © ${new Date().getFullYear()} IntelliDoc AI. All rights reserved.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `,
+    };
+
+    try {
+      if (process.env.NODE_ENV !== 'test') {
+        await transporter.sendMail(mailOptions);
+        console.log(`Contact form email from ${email} sent successfully`);
+      }
+    } catch (error) {
+      console.error('Error sending contact form email:', error);
+      throw new Error('Failed to send contact form email');
+    }
   }
 };
