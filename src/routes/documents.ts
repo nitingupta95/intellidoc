@@ -54,7 +54,8 @@ documentsRouter.post('/upload', authMiddleware, (req, res, next) => {
     // Create DB Record
     const doc = await prisma.document.create({
       data: {
-        userId,
+        uploadedBy: userId,
+        workspaceId: '',
         filename: file.originalname,
         mimeType: file.mimetype,
         storageKey,
@@ -88,7 +89,7 @@ documentsRouter.get('/', authMiddleware, async (req: any, res: any) => {
     const status = req.query.status as string;
     const search = req.query.search as string;
 
-    const where: any = { userId };
+    const where: any = { uploadedBy: userId };
     if (status) where.status = status;
     if (search) {
       where.filename = { contains: search, mode: 'insensitive' };
@@ -120,7 +121,7 @@ documentsRouter.get('/:id/status', authMiddleware, async (req: any, res: any) =>
     if (!doc) return res.status(404).json({ error: 'DOC_NOT_FOUND' });
 
     // Admin can read anyone's doc status
-    if (doc.userId !== req.user.sub && req.user.role !== 'admin') {
+    if (doc.uploadedBy !== req.user.sub && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'FORBIDDEN' });
     }
 
@@ -152,7 +153,7 @@ documentsRouter.delete('/:id', authMiddleware, async (req: any, res: any) => {
     if (!doc) return res.status(404).json({ error: 'DOC_NOT_FOUND' });
 
     // Admin can delete anyone's doc
-    if (doc.userId !== req.user.sub && req.user.role !== 'admin') {
+    if (doc.uploadedBy !== req.user.sub && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'FORBIDDEN' });
     }
 

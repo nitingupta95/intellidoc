@@ -15,6 +15,7 @@ export interface Conversation {
   updatedAt: string;
   isPinned: boolean;
   isArchived: boolean;
+  knowledgeBaseId?: string;
   messages?: { content: string; createdAt: string }[];
   metadata?: Record<string, any>;
 }
@@ -27,11 +28,11 @@ interface ConversationState {
   isLoading: boolean;
   
   // Actions
-  loadConversations: () => Promise<void>;
-  createConversation: (title?: string, knowledgeBaseId?: string | null, documentIds?: string[]) => Promise<string>;
+  loadConversations: (workspaceId: string) => Promise<void>;
+  createConversation: (title: string, workspaceId: string, knowledgeBaseId?: string, documentId?: string) => Promise<string>;
   setActiveConversation: (id: string | null) => void;
   loadMessages: (conversationId: string) => Promise<void>;
-  sendMessage: (content: string, knowledgeBaseId?: string | null, documentIds?: string[]) => Promise<void>;
+  sendMessage: (content: string, workspaceId: string, knowledgeBaseId?: string, documentId?: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   renameConversation: (id: string, title: string) => Promise<void>;
   
@@ -49,9 +50,9 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   isGenerating: false,
   isLoading: false,
 
-  loadConversations: async () => {
+  loadConversations: async (workspaceId: string) => {
     try {
-      const res = await fetch('/api/conversations');
+      const res = await fetch(`/api/conversations?workspaceId=${workspaceId}`);
       const data = await res.json();
       if (data.conversations) {
         set({ conversations: data.conversations });
@@ -61,16 +62,17 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     }
   },
 
-  createConversation: async (title = 'New Chat', knowledgeBaseId?: string | null, documentIds?: string[]) => {
+  createConversation: async (title = 'New Chat', workspaceId: string, knowledgeBaseId?: string, documentId?: string) => {
     const metadata: any = {};
-    if (knowledgeBaseId) metadata.knowledgeBaseId = knowledgeBaseId;
-    if (documentIds && documentIds.length > 0) metadata.documentIds = documentIds;
+    if (documentId) metadata.documentId = documentId;
 
     const res = await fetch('/api/conversations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         title, 
+        workspaceId,
+        knowledgeBaseId,
         metadata 
       }),
     });
@@ -143,14 +145,14 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     }
   },
 
-  sendMessage: async (content: string, knowledgeBaseId?: string | null, documentIds?: string[]) => {
+  sendMessage: async (content: string, workspaceId: string, knowledgeBaseId?: string, documentId?: string) => {
     const { activeConversationId, createConversation } = get();
     let conversationId = activeConversationId;
     
     // If no active conversation, create one first
     if (!conversationId) {
       try {
-        conversationId = await createConversation(content.substring(0, 30), knowledgeBaseId, documentIds);
+        conversationId = await createConversation(content.substring(0, 30), workspaceId, knowledgeBaseId, documentId);
       } catch (e) {
         console.error('Failed to init conversation for message', e);
         return;
@@ -176,7 +178,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       if (!res.body) throw new Error('No response body');
 
       // Check if conversation title changed
-      get().loadConversations(); // Refresh list to get new title
+      get().loadConversations(workspaceId); // Refresh list to get new title
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();

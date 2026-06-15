@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useTheme } from "next-themes";
 import { LogoutButton } from "@/components/layout/logout-button";
+import { WorkspaceSwitcher } from "@/components/layout/WorkspaceSwitcher";
 import {
   LayoutDashboard,
   Files,
@@ -53,16 +54,18 @@ export function MainSidebar() {
         </div>
 
         {!isOpen && (
-          <Button variant="ghost" size="icon" onClick={() => setIsOpen(true)} className="mb-8">
+          <Button variant="ghost" size="icon" onClick={() => setIsOpen(true)} className="mb-4">
             <PanelLeftOpen size={18} className="text-muted-foreground" />
           </Button>
         )}
         
+        <WorkspaceSwitcher isOpen={isOpen} />
+        
         <nav className="space-y-2 flex-1">
           <NavItem href="/dashboard" icon={<LayoutDashboard size={20} />} label="Dashboard" active={pathname === "/dashboard"} isOpen={isOpen} />
+          <NavItem href="/knowledge-bases" icon={<Database size={20} />} label="Knowledge Bases" active={pathname === "/knowledge-bases"} isOpen={isOpen} />
           <NavItem href="/documents" icon={<Files size={20} />} label="Documents" active={pathname === "/documents"} isOpen={isOpen} />
           <NavItem href="/chat" icon={<MessageSquare size={20} />} label="AI Chat" active={pathname.startsWith("/chat")} isOpen={isOpen} />
-          <NavItem href="/knowledge-bases" icon={<Database size={20} />} label="Knowledge Bases" active={pathname.startsWith("/knowledge-bases")} isOpen={isOpen} />
         </nav>
 
         <div className="space-y-2 border-t border-border/50 pt-4 mt-auto">

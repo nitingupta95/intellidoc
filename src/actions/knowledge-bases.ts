@@ -11,15 +11,15 @@ export async function getKnowledgeBases() {
       return { success: false, error: "Unauthorized" };
     }
 
-    const userTeams = await db.teamMember.findMany({
+    const userWorkspaces = await db.workspaceMember.findMany({
       where: { userId: session.user.id },
-      select: { teamId: true }
+      select: { workspaceId: true }
     });
     
-    const teamIds = userTeams.map(t => t.teamId);
+    const workspaceIds = userWorkspaces.map(t => t.workspaceId);
 
     const kbs = await db.knowledgeBase.findMany({
-      where: { teamId: { in: teamIds } },
+      where: { workspaceId: { in: workspaceIds } },
       orderBy: { createdAt: "desc" },
       include: {
         _count: {
@@ -34,7 +34,7 @@ export async function getKnowledgeBases() {
   }
 }
 
-export async function createKnowledgeBase(data: { name: string; description?: string; teamId?: string }) {
+export async function createKnowledgeBase(data: { name: string; description?: string; workspaceId?: string }) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -42,29 +42,30 @@ export async function createKnowledgeBase(data: { name: string; description?: st
     }
     
     const userId = session.user.id;
-    let targetTeamId = data.teamId;
+    let targetWorkspaceId = data.workspaceId;
 
-    if (!targetTeamId || targetTeamId === "team_123") {
-      const teamMember = await db.teamMember.findFirst({
+    if (!targetWorkspaceId || targetWorkspaceId === "team_123") {
+      const workspaceMember = await db.workspaceMember.findFirst({
         where: { userId },
-        include: { team: true }
+        include: { workspace: true }
       });
       
-      if (teamMember) {
-        targetTeamId = teamMember.teamId;
+      if (workspaceMember) {
+        targetWorkspaceId = workspaceMember.workspaceId;
       } else {
-        const newTeam = await db.team.create({
+        const newWorkspace = await db.workspace.create({
           data: {
-            name: `${session.user.name || 'Personal'}'s Team`,
+            name: `${session.user.name || 'Personal'}'s Workspace`,
+            ownerId: userId,
             members: {
               create: {
                 userId,
-                role: "ADMIN"
+                role: "OWNER"
               }
             }
           }
         });
-        targetTeamId = newTeam.id;
+        targetWorkspaceId = newWorkspace.id;
       }
     }
 
@@ -72,7 +73,7 @@ export async function createKnowledgeBase(data: { name: string; description?: st
       data: {
         name: data.name,
         description: data.description,
-        teamId: targetTeamId as string,
+        workspaceId: targetWorkspaceId as string,
       },
     });
     
@@ -104,17 +105,17 @@ export async function getKnowledgeBase(id: string) {
       return { success: false, error: "Knowledge base not found" };
     }
 
-    // Verify user has access to this team's KB
-    const teamMember = await db.teamMember.findUnique({
+    // Verify user has access to this workspace's KB
+    const workspaceMember = await db.workspaceMember.findUnique({
       where: {
-        teamId_userId: {
-          teamId: kb.teamId,
+        workspaceId_userId: {
+          workspaceId: kb.workspaceId,
           userId: session.user.id,
         },
       },
     });
 
-    if (!teamMember) {
+    if (!workspaceMember) {
       return { success: false, error: "Unauthorized access to this knowledge base" };
     }
 
@@ -136,16 +137,16 @@ export async function updateKnowledgeBase(id: string, data: { name: string; desc
     if (!kb) return { success: false, error: "Knowledge base not found" };
 
     // Verify access
-    const teamMember = await db.teamMember.findUnique({
+    const workspaceMember = await db.workspaceMember.findUnique({
       where: {
-        teamId_userId: {
-          teamId: kb.teamId,
+        workspaceId_userId: {
+          workspaceId: kb.workspaceId,
           userId: session.user.id,
         },
       },
     });
 
-    if (!teamMember) return { success: false, error: "Unauthorized" };
+    if (!workspaceMember) return { success: false, error: "Unauthorized" };
 
     const updatedKb = await db.knowledgeBase.update({
       where: { id },
@@ -175,16 +176,16 @@ export async function deleteKnowledgeBase(id: string) {
     if (!kb) return { success: false, error: "Knowledge base not found" };
 
     // Verify access
-    const teamMember = await db.teamMember.findUnique({
+    const workspaceMember = await db.workspaceMember.findUnique({
       where: {
-        teamId_userId: {
-          teamId: kb.teamId,
+        workspaceId_userId: {
+          workspaceId: kb.workspaceId,
           userId: session.user.id,
         },
       },
     });
 
-    if (!teamMember) return { success: false, error: "Unauthorized" };
+    if (!workspaceMember) return { success: false, error: "Unauthorized" };
 
     await db.knowledgeBase.delete({ where: { id } });
 
@@ -204,17 +205,17 @@ export async function addDocumentToKnowledgeBase(documentId: string, knowledgeBa
     const kb = await db.knowledgeBase.findUnique({ where: { id: knowledgeBaseId } });
     if (!kb) return { success: false, error: "Knowledge base not found" };
 
-    // Verify user owns the document or has access to the KB's team
-    const teamMember = await db.teamMember.findUnique({
+    // Verify user owns the document or has access to the KB's workspace
+    const workspaceMember = await db.workspaceMember.findUnique({
       where: {
-        teamId_userId: {
-          teamId: kb.teamId,
+        workspaceId_userId: {
+          workspaceId: kb.workspaceId,
           userId: session.user.id,
         },
       },
     });
 
-    if (!teamMember) return { success: false, error: "Unauthorized access to KB" };
+    if (!workspaceMember) return { success: false, error: "Unauthorized access to KB" };
 
     // Also could verify document ownership here if required
 
@@ -240,7 +241,7 @@ export async function removeDocumentFromKnowledgeBase(documentId: string) {
     if (!document) return { success: false, error: "Document not found" };
 
     // Verify document ownership or team permissions
-    if (document.userId !== session.user.id) {
+    if (document.uploadedBy !== session.user.id) {
       return { success: false, error: "Unauthorized" };
     }
 

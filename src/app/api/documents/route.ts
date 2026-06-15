@@ -10,19 +10,36 @@ export async function GET(req: Request) {
     }
 
     const { searchParams } = new URL(req.url);
-    const kbId = searchParams.get('knowledgeBaseId');
+    const workspaceId = searchParams.get('workspaceId');
+    const knowledgeBaseId = searchParams.get('knowledgeBaseId');
 
-    const whereClause: any = {
-      userId: session.user.id
-    };
+    if (!workspaceId) {
+      return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 });
+    }
 
-    if (kbId) {
-      whereClause.knowledgeBaseId = kbId;
+    // Check if user is a member of the workspace
+    const membership = await db.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: session.user.id } }
+    });
+
+    if (!membership) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // Build query conditions
+    const whereClause: any = { workspaceId };
+    if (knowledgeBaseId) {
+      whereClause.knowledgeBaseId = knowledgeBaseId;
     }
 
     const documents = await db.document.findMany({
       where: whereClause,
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: {
+          select: { name: true, email: true }
+        }
+      }
     });
 
     return NextResponse.json({ documents });

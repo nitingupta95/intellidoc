@@ -3,9 +3,10 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 
-export async function getDocuments() {
+export async function getDocuments(workspaceId: string) {
   try {
     const docs = await db.document.findMany({
+      where: { workspaceId },
       orderBy: { createdAt: "desc" },
     });
     return { success: true, data: docs };
@@ -20,9 +21,10 @@ export async function createDocumentRecord(data: {
   filename: string;
   fileSize: number;
   mimeType: string;
-  userId: string;
+  uploadedBy: string;
   storageKey: string;
-  knowledgeBaseId?: string;
+  workspaceId: string;
+  knowledgeBaseId?: string | null;
 }) {
   try {
     const doc = await db.document.create({
@@ -31,17 +33,16 @@ export async function createDocumentRecord(data: {
         filename: data.filename,
         fileSize: data.fileSize,
         mimeType: data.mimeType,
-        userId: data.userId,
+        uploadedBy: data.uploadedBy,
         storageKey: data.storageKey,
         status: "UPLOADED",
+        workspaceId: data.workspaceId,
         knowledgeBaseId: data.knowledgeBaseId || null,
       },
     });
     
     revalidatePath("/documents");
-    if (data.knowledgeBaseId) {
-      revalidatePath(`/knowledge-bases/${data.knowledgeBaseId}`);
-    }
+    revalidatePath(`/workspaces/${data.workspaceId}`);
     return { success: true, data: doc };
   } catch (error) {
     console.error("Failed to create document record:", error);

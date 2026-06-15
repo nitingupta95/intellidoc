@@ -54,13 +54,17 @@ def get_vector_store(provider: str = "openai", dimension: int = 1536):
 
 class ChatRequest(BaseModel):
     query: str
-    document_ids: Optional[List[str]] = None
+    workspace_id: str
     knowledge_base_id: Optional[str] = None
+    document_ids: Optional[List[str]] = None
     history: Optional[List[dict]] = None
 
 class DocumentProcessRequest(BaseModel):
     document_id: str
     file_path: str
+    workspace_id: str
+    knowledge_base_id: Optional[str] = None
+    uploaded_by: str
     metadata: dict = {}
 
 consumer_task = None
@@ -95,6 +99,8 @@ async def chat_endpoint(request: ChatRequest, x_openai_api_key: Optional[str] = 
         search_results = vs.search(
             query_vector=query_vector, 
             limit=5, 
+            workspace_id=request.workspace_id,
+            knowledge_base_id=request.knowledge_base_id,
             document_ids=request.document_ids
         )
         
@@ -140,7 +146,7 @@ async def chat_endpoint(request: ChatRequest, x_openai_api_key: Optional[str] = 
 
 class RetrieveRequest(BaseModel):
     query: str
-    document_ids: list[str]
+    workspace_id: str
     limit: int = 5
 
 @app.post("/api/v1/retrieve")
@@ -162,7 +168,7 @@ async def retrieve_endpoint(request: RetrieveRequest, x_openai_api_key: Optional
     search_results = vs.search(
         query_vector=query_vector, 
         limit=request.limit, 
-        document_ids=request.document_ids
+        workspace_id=request.workspace_id
     )
     
     chunks = []
@@ -192,7 +198,7 @@ def update_document_status(document_id: str, data: dict):
     except Exception as e:
         logger.error(f"Failed to update document status in Next.js: {e}")
 
-def process_document_pipeline(file_path: str, document_id: str, metadata: dict, openai_api_key: str = None, gemini_api_key: str = None):
+def process_document_pipeline(file_path: str, document_id: str, workspace_id: str, uploaded_by: str, knowledge_base_id: Optional[str], metadata: dict, openai_api_key: str = None, gemini_api_key: str = None):
     """Background task for parsing, chunking, and embedding."""
     try:
         update_document_status(document_id, {"status": "PROCESSING", "currentStep": "Downloading from MinIO", "progress": 10})
@@ -207,8 +213,15 @@ def process_document_pipeline(file_path: str, document_id: str, metadata: dict, 
             region_name=settings.AWS_REGION
         )
         
+        # Extract object key if a URI was provided
+        object_key = file_path
+        if object_key.startswith("minio://"):
+            parts = object_key.replace("minio://", "").split("/", 1)
+            if len(parts) == 2:
+                object_key = parts[1]
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-            s3.download_file(settings.S3_BUCKET, file_path, tmp_file.name)
+            s3.download_file(settings.S3_BUCKET, object_key, tmp_file.name)
             local_path = tmp_file.name
             
         logger.info(f"Downloaded to local path: {local_path}")
@@ -222,6 +235,10 @@ def process_document_pipeline(file_path: str, document_id: str, metadata: dict, 
             if "metadata" not in el:
                 el["metadata"] = {}
             el["metadata"]["document_id"] = document_id
+            el["metadata"]["workspace_id"] = workspace_id
+            if knowledge_base_id:
+                el["metadata"]["knowledge_base_id"] = knowledge_base_id
+            el["metadata"]["uploaded_by"] = uploaded_by
             
         # 2. Chunk
         update_document_status(document_id, {"currentStep": "Chunking text", "progress": 50})
@@ -278,6 +295,9 @@ async def process_document(request: DocumentProcessRequest, bg_tasks: Background
         process_document_pipeline, 
         request.file_path, 
         request.document_id, 
+        request.workspace_id,
+        request.uploaded_by,
+        request.knowledge_base_id,
         request.metadata,
         x_openai_api_key,
         x_gemini_api_key

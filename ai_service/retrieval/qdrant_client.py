@@ -27,15 +27,20 @@ class QdrantVectorStore:
                 )
                 logger.info(f"Created Qdrant collection: {self.collection_name} with dim {self.dimension}")
                 
-            # Always ensure the payload index exists for document_id filtering
+            # Always ensure the payload index exists for workspace_id filtering
             try:
                 from qdrant_client.models import PayloadSchemaType
                 self.client.create_payload_index(
                     collection_name=self.collection_name,
-                    field_name="metadata.document_id",
+                    field_name="metadata.workspace_id",
                     field_schema=PayloadSchemaType.KEYWORD,
                 )
-                logger.info("Ensured keyword payload index for metadata.document_id")
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="metadata.knowledge_base_id",
+                    field_schema=PayloadSchemaType.KEYWORD,
+                )
+                logger.info("Ensured keyword payload indices")
             except Exception as index_err:
                 # If index already exists or another minor error, it's safe to ignore
                 logger.warning(f"Note on payload index (might already exist): {index_err}")
@@ -61,21 +66,35 @@ class QdrantVectorStore:
             points=points
         )
         
-    def search(self, query_vector: list[float], limit: int = 5, document_ids: list[str] = None):
-        query_filter = None
-        if document_ids:
-            query_filter = Filter(
-                must=[
-                    FieldCondition(
-                        key="metadata.document_id",
-                        match=MatchAny(any=document_ids)
-                    )
-                ]
+    def search(self, query_vector: list[float], workspace_id: str, knowledge_base_id: str = None, document_ids: list[str] = None, limit: int = 5):
+        must_conditions = [
+            FieldCondition(
+                key="metadata.workspace_id",
+                match=MatchAny(any=[workspace_id])
             )
+        ]
+        
+        if document_ids is not None:
+            # Only search within the provided document_ids (this is the most precise filter)
+            must_conditions.append(
+                FieldCondition(
+                    key="metadata.document_id",
+                    match=MatchAny(any=document_ids)
+                )
+            )
+        elif knowledge_base_id:
+            must_conditions.append(
+                FieldCondition(
+                    key="metadata.knowledge_base_id",
+                    match=MatchAny(any=[knowledge_base_id])
+                )
+            )
+
+        query_filter = Filter(must=must_conditions)
             
-        return self.client.query_points(
+        return self.client.search(
             collection_name=self.collection_name,
-            query=query_vector,
+            query_vector=query_vector,
             query_filter=query_filter,
             limit=limit
-        ).points
+        )
