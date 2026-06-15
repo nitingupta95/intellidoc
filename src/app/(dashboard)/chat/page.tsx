@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { MessageSquare, Paperclip, Send, BrainCircuit, Info, User, Loader2, Menu, Database, ChevronDown } from "lucide-react";
+import { MessageSquare, Send, BrainCircuit, Info, User, Loader2, Menu, Database, ChevronDown } from "lucide-react";
 import { getKnowledgeBases } from "@/actions/knowledge-bases";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -64,15 +64,15 @@ function ChatContent() {
 
   return (
     <div className="h-full flex overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-700 bg-background/50">
-      {isChatSidebarOpen && <ChatSidebar className="hidden md:flex" />}
+      {isChatSidebarOpen && <ChatSidebar className="hidden lg:flex" />}
       
       <div className="flex-1 flex flex-col min-w-0">
         {/* Chat Header */}
-        <header className="h-16 border-b border-border/50 flex items-center justify-between px-4 md:px-6 shrink-0 glass-panel">
-          <div className="flex items-center gap-3">
+        <header className="h-16 border-b border-border/50 flex items-center justify-between px-4 md:px-6 shrink-0 glass-panel gap-2">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0">
             <Drawer>
               <DrawerTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden mr-2">
+                <Button variant="ghost" size="icon" className="lg:hidden mr-2 shrink-0">
                   <Menu size={20} />
                 </Button>
               </DrawerTrigger>
@@ -84,25 +84,25 @@ function ChatContent() {
             <Button 
               variant="ghost" 
               size="icon" 
-              className="hidden md:flex mr-2 text-muted-foreground hover:bg-muted"
+              className="hidden lg:flex mr-2 text-muted-foreground hover:bg-muted shrink-0"
               onClick={() => setIsChatSidebarOpen(!isChatSidebarOpen)}
             >
               <Menu size={20} />
             </Button>
 
-            <div className="p-2 bg-primary/10 rounded-lg text-primary">
+            <div className="p-2 bg-primary/10 rounded-lg text-primary shrink-0 hidden sm:flex">
               <BrainCircuit size={20} />
             </div>
-            <div>
-              <h2 className="font-heading font-semibold text-sm">IntelliDoc Assistant</h2>
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block"></span>
-                Using GPT-4o with RAG
+            <div className="min-w-0">
+              <h2 className="font-heading font-semibold text-sm truncate">IntelliDoc Assistant</h2>
+              <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block shrink-0"></span>
+                <span className="truncate">Using GPT-4o with RAG</span>
               </p>
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 md:gap-2 shrink-0">
             {(() => {
               const activeConv = conversations.find(c => c.id === activeConversationId);
               const isExisting = !!activeConversationId;
@@ -121,9 +121,9 @@ function ChatContent() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild disabled={isExisting}>
                     <Button variant="outline" size="sm" className="hidden sm:flex items-center gap-2 border-border/50 bg-background/50 text-xs text-muted-foreground hover:text-foreground">
-                      <Database size={14} className="text-primary" />
+                      <Database size={14} className="text-primary shrink-0" />
                       <span className="truncate max-w-[150px]">{label}</span>
-                      {!isExisting && <ChevronDown size={14} className="opacity-50" />}
+                      {!isExisting && <ChevronDown size={14} className="opacity-50 shrink-0" />}
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
@@ -242,10 +242,6 @@ function ChatContent() {
         <div className="p-3 md:p-4 border-t border-border/50 glass-panel shrink-0 pb-[calc(env(safe-area-inset-bottom)+12px)] md:pb-4">
           <div className="max-w-4xl mx-auto relative">
             <div className="bg-background/80 rounded-2xl border border-border/50 flex items-end p-1.5 md:p-2 focus-within:ring-2 focus-within:ring-primary/50 focus-within:border-primary/50 transition-all shadow-sm">
-              <Button variant="ghost" size="icon" className="rounded-full text-muted-foreground shrink-0 mb-0.5 md:mb-1 h-10 w-10" disabled={hasKey === false}>
-                <Paperclip size={20} />
-              </Button>
-              
               <textarea 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}

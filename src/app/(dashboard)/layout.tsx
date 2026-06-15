@@ -13,9 +13,9 @@ export default function DashboardLayout({
       <MainSidebar />
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col relative h-full overflow-hidden pb-16 md:pb-0">
+      <main className="flex-1 flex flex-col relative h-full overflow-hidden pb-16 lg:pb-0">
         {/* Top Navigation for Mobile (stubbed out) */}
-        <header className="h-16 min-h-[64px] border-b border-border glass flex items-center justify-between px-6 md:hidden z-10 shrink-0">
+        <header className="h-16 min-h-[64px] border-b border-border glass flex items-center justify-between px-6 lg:hidden z-10 shrink-0">
           <span className="font-heading font-bold text-lg tracking-tight">IntelliDoc AI</span>
         </header>
 

@@ -32,7 +32,7 @@ export function MainSidebar() {
   const initials = nameParts.length > 0 ? (nameParts[0][0] + (nameParts.length > 1 ? nameParts[1][0] : "")).toUpperCase() : "U";
 
   return (
-    <aside className={`glass border-r border-border flex flex-col justify-between hidden md:flex shrink-0 transition-all duration-300 ${isOpen ? "w-64" : "w-20"}`}>
+    <aside className={`glass border-r border-border flex flex-col justify-between hidden lg:flex shrink-0 transition-all duration-300 ${isOpen ? "w-64" : "w-20"}`}>
       <div className={`p-4 flex flex-col h-full ${!isOpen && "items-center"}`}>
         <div className={`flex items-center ${isOpen ? "justify-between" : "justify-center"} mb-8`}>
           {isOpen ? (
