@@ -40,6 +40,11 @@ class QdrantVectorStore:
                     field_name="metadata.knowledge_base_id",
                     field_schema=PayloadSchemaType.KEYWORD,
                 )
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="metadata.document_id",
+                    field_schema=PayloadSchemaType.KEYWORD,
+                )
                 logger.info("Ensured keyword payload indices")
             except Exception as index_err:
                 # If index already exists or another minor error, it's safe to ignore

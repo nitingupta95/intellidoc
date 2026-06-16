@@ -3,7 +3,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const s3 = new S3Client({
   region: process.env.AWS_REGION || 'us-east-1',
-  endpoint: process.env.S3_ENDPOINT || undefined,
+  ...(process.env.S3_ENDPOINT ? { endpoint: process.env.S3_ENDPOINT } : {}),
   forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true', // Required for MinIO
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID || 'dummy',
