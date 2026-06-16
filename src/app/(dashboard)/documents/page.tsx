@@ -171,7 +171,7 @@ export default function DocumentsPage() {
   };
 
   return (
-    <div className="h-full flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 shrink-0">
         <div>
           <h1 className="text-3xl font-heading font-bold tracking-tight">Documents</h1>
@@ -254,7 +254,7 @@ export default function DocumentsPage() {
       </div>
 
       {/* Document List */}
-      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin pb-6">
+      <div className="pb-6">
         {loadingDocs ? (
           <div className="glass-panel p-8 text-center text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
