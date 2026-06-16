@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, CreateBucketCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const s3 = new S3Client({
@@ -13,12 +13,26 @@ const s3 = new S3Client({
 const BUCKET = process.env.S3_BUCKET || 'doc-management-test-bucket';
 
 export const uploadFile = async (buffer: Buffer, key: string, mimeType?: string): Promise<string> => {
-  await s3.send(new PutObjectCommand({
-    Bucket: BUCKET,
-    Key: key,
-    Body: buffer,
-    ContentType: mimeType
-  }));
+  try {
+    await s3.send(new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      Body: buffer,
+      ContentType: mimeType
+    }));
+  } catch (error: any) {
+    if (error.name === 'NoSuchBucket') {
+      await s3.send(new CreateBucketCommand({ Bucket: BUCKET }));
+      await s3.send(new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: key,
+        Body: buffer,
+        ContentType: mimeType
+      }));
+    } else {
+      throw error;
+    }
+  }
   return key;
 };
 

@@ -11,7 +11,8 @@ import {
   Clock,
   Loader2,
   MessageSquare,
-  Trash2
+  Trash2,
+  Building2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MobileDrawer } from "@/components/layout/mobile-drawer";
@@ -75,6 +76,7 @@ export default function DocumentsPage() {
       fetchDocuments();
     } else {
       setDocuments([]);
+      setLoadingDocs(false);
     }
   }, [activeWorkspaceId]);
 
@@ -176,8 +178,14 @@ export default function DocumentsPage() {
           <p className="text-muted-foreground mt-1">Manage and upload your knowledge base files.</p>
         </div>
         <Button 
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isUploading}
+          onClick={() => {
+            if (!activeWorkspaceId) {
+              toast.error("Please select a workspace first");
+              return;
+            }
+            fileInputRef.current?.click();
+          }}
+          disabled={isUploading || !activeWorkspaceId}
           className="font-medium rounded-full px-6 shadow-lg shadow-primary/20"
         >
           {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
@@ -217,8 +225,14 @@ export default function DocumentsPage() {
 
       {/* Upload Zone */}
       <div 
-        onClick={() => fileInputRef.current?.click()}
-        className="glass border-dashed border-2 border-border/50 rounded-2xl p-10 flex flex-col items-center justify-center text-center shrink-0 hover:bg-background/40 transition-colors cursor-pointer group"
+        onClick={() => {
+          if (!activeWorkspaceId) {
+            toast.error("Please select a workspace first");
+            return;
+          }
+          fileInputRef.current?.click();
+        }}
+        className={`glass border-dashed border-2 border-border/50 rounded-2xl p-10 flex flex-col items-center justify-center text-center shrink-0 transition-colors group ${activeWorkspaceId ? 'hover:bg-background/40 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}
       >
         <input 
           type="file" 
@@ -226,6 +240,7 @@ export default function DocumentsPage() {
           className="hidden" 
           onChange={handleFileChange} 
           accept=".pdf,.docx,.txt,.md,.csv" 
+          disabled={!activeWorkspaceId}
         />
         <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-4 group-hover:scale-110 transition-transform">
           {isUploading ? <Loader2 size={28} className="animate-spin" /> : <Upload size={28} />}
@@ -244,6 +259,17 @@ export default function DocumentsPage() {
           <div className="glass-panel p-8 text-center text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
             Loading documents...
+          </div>
+        ) : !activeWorkspaceId ? (
+          <div className="glass-panel p-12 text-center flex flex-col items-center justify-center min-h-[300px]">
+            <Building2 className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
+            <h3 className="text-xl font-heading font-semibold mb-2">No Workspace Selected</h3>
+            <p className="text-muted-foreground max-w-md mb-6">
+              You need to select or create a workspace before you can upload and manage documents.
+            </p>
+            <Button onClick={() => router.push('/settings/team')} className="rounded-full shadow-lg">
+              Manage Workspaces
+            </Button>
           </div>
         ) : documents.length === 0 ? (
           <div className="glass-panel p-8 text-center text-muted-foreground">

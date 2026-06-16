@@ -92,9 +92,17 @@ class QdrantVectorStore:
 
         query_filter = Filter(must=must_conditions)
             
-        return self.client.search(
-            collection_name=self.collection_name,
-            query_vector=query_vector,
-            query_filter=query_filter,
-            limit=limit
-        )
+        if hasattr(self.client, "query_points"):
+            return self.client.query_points(
+                collection_name=self.collection_name,
+                query=query_vector,
+                query_filter=query_filter,
+                limit=limit
+            ).points
+        else:
+            return self.client.search(
+                collection_name=self.collection_name,
+                query_vector=query_vector,
+                query_filter=query_filter,
+                limit=limit
+            )

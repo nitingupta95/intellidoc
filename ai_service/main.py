@@ -142,7 +142,16 @@ async def chat_endpoint(request: ChatRequest, x_openai_api_key: Optional[str] = 
         logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
         # Return a 500 but WITH the error string so we can see it in Vercel logs!
         from fastapi.responses import JSONResponse
-        return JSONResponse(status_code=500, content={"error": "Internal Server Error", "detail": str(e), "type": str(type(e))})
+        debug_info = {}
+        try:
+            vs = get_vector_store()
+            debug_info["dir_client"] = dir(vs.client)
+            debug_info["type_client"] = str(type(vs.client))
+            import qdrant_client
+            debug_info["version"] = getattr(qdrant_client, "__version__", "unknown")
+        except:
+            pass
+        return JSONResponse(status_code=500, content={"error": "Internal Server Error", "detail": str(e), "type": str(type(e)), "debug": debug_info})
 
 class RetrieveRequest(BaseModel):
     query: str
