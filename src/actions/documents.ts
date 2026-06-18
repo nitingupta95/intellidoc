@@ -25,6 +25,7 @@ export async function createDocumentRecord(data: {
   storageKey: string;
   workspaceId: string;
   knowledgeBaseId?: string | null;
+  folderId?: string | null;
 }) {
   try {
     const doc = await db.document.create({
@@ -38,6 +39,7 @@ export async function createDocumentRecord(data: {
         status: "UPLOADED",
         workspaceId: data.workspaceId,
         knowledgeBaseId: data.knowledgeBaseId || null,
+        folderId: data.folderId || null,
       },
     });
     

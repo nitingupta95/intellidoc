@@ -64,6 +64,7 @@ model User {
   sessions      Session[]
   payments      Payment[]
   subscriptions Subscription[]
+  sharedLinks   SharedLink[]
 }
 
 // ── Payment ────────────────────────────────────────────────
@@ -144,6 +145,8 @@ model Workspace {
 
   members     WorkspaceMember[]
   documents   Document[]
+  folders     Folder[]
+  sharedLinks SharedLink[]
   knowledgeBases KnowledgeBase[]
   invitations Invitation[]
   conversations Conversation[]
@@ -163,6 +166,41 @@ model KnowledgeBase {
   workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   documents   Document[]
   conversations Conversation[]
+}
+
+model Folder {
+  id          String   @id @default(cuid())
+  name        String
+  workspaceId String
+  parentId    String?  // Optional for nested folders
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parent      Folder?    @relation("FolderToFolder", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Folder[]   @relation("FolderToFolder")
+  documents   Document[]
+
+  @@index([workspaceId])
+  @@index([parentId])
+}
+
+model SharedLink {
+  id          String   @id @default(cuid())
+  token       String   @unique
+  resourceId  String   // Document ID, Conversation ID, or Folder ID
+  resourceType String  // 'DOCUMENT', 'CONVERSATION', 'FOLDER'
+  workspaceId String
+  createdBy   String
+  expiresAt   DateTime?
+  accessCount Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([resourceId])
 }
 
 model WorkspaceMember {
@@ -207,11 +245,14 @@ model Document {
   embeddingModel  String?
   errorMessage    String?
   jobId           String?
+  summary         String?   @db.Text
+  suggestedQuestions Json?
   
   // Existing fields kept
   title           String?
   fileSize        Int?
   knowledgeBaseId String?
+  folderId        String?
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -219,6 +260,7 @@ model Document {
   user            User           @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
   workspace       Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   knowledgeBase   KnowledgeBase? @relation(fields: [knowledgeBaseId], references: [id], onDelete: SetNull)
+  folder          Folder?        @relation(fields: [folderId], references: [id], onDelete: SetNull)
   
   conversations   Conversation[]
   chunks          Chunk[]

@@ -1,31 +1,44 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area
 } from 'recharts';
-import { Activity, Database, FileText, Users, ArrowUpRight } from "lucide-react";
-
-const queryData = [
-  { name: 'Mon', queries: 400 },
-  { name: 'Tue', queries: 300 },
-  { name: 'Wed', queries: 550 },
-  { name: 'Thu', queries: 480 },
-  { name: 'Fri', queries: 700 },
-  { name: 'Sat', queries: 200 },
-  { name: 'Sun', queries: 150 },
-];
-
-const storageData = [
-  { name: 'Jan', usage: 10 },
-  { name: 'Feb', usage: 15 },
-  { name: 'Mar', usage: 28 },
-  { name: 'Apr', usage: 45 },
-  { name: 'May', usage: 60 },
-  { name: 'Jun', usage: 85 },
-];
+import { Activity, Database, FileText, Users, ArrowUpRight, Loader2 } from "lucide-react";
+import { useWorkspaceStore } from "@/store/workspace-store";
 
 export default function AnalyticsPage() {
+  const { activeWorkspaceId } = useWorkspaceStore();
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState({
+    metrics: { totalDocuments: 0, totalQueries: 0, storageGB: 0, activeUsers: 0 },
+    queryData: [],
+    storageData: []
+  });
+
+  useEffect(() => {
+    if (!activeWorkspaceId) return;
+
+    fetch(`/api/analytics?workspaceId=${activeWorkspaceId}`)
+      .then(res => res.json())
+      .then(resData => {
+        if (!resData.error) {
+          setData(resData);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [activeWorkspaceId]);
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-y-auto pb-6 pr-2">
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 shrink-0">
@@ -38,10 +51,10 @@ export default function AnalyticsPage() {
       {/* Top Metrics Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { title: "Total Documents", value: "1,248", change: "+12%", icon: FileText, color: "text-blue-500" },
-          { title: "AI Queries (30d)", value: "48.2k", change: "+24%", icon: Activity, color: "text-green-500" },
-          { title: "Vector Storage", value: "24.5 GB", change: "+5%", icon: Database, color: "text-purple-500" },
-          { title: "Active Users", value: "142", change: "+18%", icon: Users, color: "text-orange-500" },
+          { title: "Total Documents", value: data.metrics.totalDocuments, change: "+0%", icon: FileText, color: "text-blue-500" },
+          { title: "Total Queries", value: data.metrics.totalQueries, change: "+0%", icon: Activity, color: "text-green-500" },
+          { title: "Vector Storage", value: `${data.metrics.storageGB} GB`, change: "+0%", icon: Database, color: "text-purple-500" },
+          { title: "Active Users (30d)", value: data.metrics.activeUsers, change: "+0%", icon: Users, color: "text-orange-500" },
         ].map((metric, i) => (
           <div key={i} className="glass-panel p-5 border border-border/50 relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full blur-[30px] group-hover:bg-primary/10 transition-colors pointer-events-none" />
@@ -71,7 +84,7 @@ export default function AnalyticsPage() {
           </div>
           <div className="flex-1 w-full h-full min-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={queryData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+              <BarChart data={data.queryData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
                 <XAxis dataKey="name" stroke="#666" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke="#666" fontSize={12} tickLine={false} axisLine={false} />
@@ -95,7 +108,7 @@ export default function AnalyticsPage() {
           </div>
           <div className="flex-1 w-full h-full min-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={storageData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+              <AreaChart data={data.storageData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorUsage" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>

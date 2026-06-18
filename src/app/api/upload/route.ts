@@ -17,6 +17,7 @@ export async function POST(req: Request) {
     const file = formData.get("file") as File;
     const workspaceId = formData.get("workspaceId") as string;
     const knowledgeBaseId = formData.get("knowledgeBaseId") as string | null;
+    const folderId = formData.get("folderId") as string | null;
     
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -45,6 +46,7 @@ export async function POST(req: Request) {
       uploadedBy: session.user.id,
       workspaceId,
       knowledgeBaseId,
+      folderId,
     });
 
     if (!dbRecord.success) {

@@ -1,15 +1,19 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { MessageSquare, Send, BrainCircuit, Info, User, Loader2, Menu, Database, ChevronDown } from "lucide-react";
+import { MessageSquare, Send, BrainCircuit, Info, User, Loader2, Menu, Database, ChevronDown, Download, FileText, FileDown, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useConversationStore } from "@/store/conversation-store";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
+import { toast } from "sonner";
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import Link from "next/link";
 import { useWorkspaceStore } from "@/store/workspace-store";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { exportAsMarkdown, exportAsPdf } from "@/lib/export-chat";
 
 function ChatContent() {
   const { messages, isGenerating, sendMessage, activeConversationId, conversations, setActiveConversation } = useConversationStore();
@@ -23,6 +27,8 @@ function ChatContent() {
   
   const [kbs, setKbs] = useState<any[]>([]);
   const [selectedKbId, setSelectedKbId] = useState<string>("");
+  const [docDetails, setDocDetails] = useState<any>(null);
+  const [isSharing, setIsSharing] = useState(false);
   
   const docId = searchParams?.get("documentId") || undefined;
   const docTitle = searchParams?.get("documentTitle") || undefined;
@@ -60,6 +66,15 @@ function ChatContent() {
   useEffect(() => {
     if (docId) {
       setActiveConversation(null);
+      // Fetch document details for summary and suggested questions
+      fetch(`/api/documents/${docId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.document) setDocDetails(data.document);
+        })
+        .catch(console.error);
+    } else {
+      setDocDetails(null);
     }
   }, [docId, setActiveConversation]);
 
@@ -78,13 +93,41 @@ function ChatContent() {
     }
   };
 
+  const handleShare = async () => {
+    if (!activeConversationId || !activeWorkspaceId) return;
+    setIsSharing(true);
+    try {
+      const res = await fetch("/api/shared-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resourceId: activeConversationId,
+          resourceType: "CONVERSATION",
+          workspaceId: activeWorkspaceId
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const url = `${window.location.origin}/shared/${data.token}`;
+        await navigator.clipboard.writeText(url);
+        toast.success("Share link copied to clipboard!");
+      } else {
+        throw new Error("Failed to share");
+      }
+    } catch (e) {
+      toast.error("Could not generate share link.");
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
   return (
     <div className="h-full flex overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-700 bg-background/50">
       {isChatSidebarOpen && <ChatSidebar className="hidden lg:flex" />}
       
       <div className="flex-1 flex flex-col min-w-0">
         {/* Chat Header */}
-        <header className="h-16 border-b border-border/50 flex items-center justify-between px-4 md:px-6 shrink-0 glass-panel gap-2">
+        <header className="relative z-50 h-16 border-b border-border/50 flex items-center justify-between px-4 md:px-6 shrink-0 glass-panel gap-2">
           <div className="flex items-center gap-2 md:gap-3 min-w-0">
             <Drawer>
               <DrawerTrigger asChild>
@@ -133,6 +176,43 @@ function ChatContent() {
               </select>
             )}
 
+            {/* Share and Export */}
+            {activeConversationId && messages.length > 0 && (
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-muted-foreground" 
+                title="Share Chat"
+                onClick={handleShare}
+                disabled={isSharing}
+              >
+                {isSharing ? <Loader2 size={20} className="animate-spin" /> : <Share2 size={20} />}
+              </Button>
+            )}
+
+            {/* Export dropdown */}
+            {messages.length > 0 && (
+              <div className="relative group">
+                <Button variant="ghost" size="icon" className="text-muted-foreground" title="Export Chat">
+                  <Download size={20} />
+                </Button>
+                <div className="absolute right-0 top-full mt-1 w-48 bg-background border border-border/50 rounded-xl p-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 shadow-xl">
+                  <button
+                    onClick={() => exportAsMarkdown(messages, activeConversation?.title || 'IntelliDoc Chat')}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors text-left"
+                  >
+                    <FileText size={14} /> Export as Markdown
+                  </button>
+                  <button
+                    onClick={() => exportAsPdf(messages, activeConversation?.title || 'IntelliDoc Chat')}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors text-left"
+                  >
+                    <FileDown size={14} /> Export as PDF
+                  </button>
+                </div>
+              </div>
+            )}
+
             <Button variant="ghost" size="icon" className="text-muted-foreground">
               <Info size={20} />
             </Button>
@@ -172,8 +252,8 @@ function ChatContent() {
               </div>
             </div>
           ) : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center space-y-6 max-w-md mx-auto mt-10">
-              <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary mb-4">
+            <div className="flex flex-col items-center py-10 md:py-20 text-center space-y-6 max-w-md mx-auto min-h-full">
+              <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary mb-4 shrink-0">
                 <MessageSquare size={32} />
               </div>
               <h2 className="text-2xl font-heading font-semibold">
@@ -181,7 +261,7 @@ function ChatContent() {
               </h2>
               <p className="text-muted-foreground text-sm">
                 {docTitle 
-                  ? "Ask me anything about this document. I'll search through it and provide cited answers."
+                  ? docDetails?.summary || "Ask me anything about this document. I'll search through it and provide cited answers."
                   : "Select a document from the dropdown above, or ask a general question. If you haven't uploaded any PDFs yet, head over to the Documents section."}
               </p>
               
@@ -194,9 +274,17 @@ function ChatContent() {
               )}
               
               <div className="grid grid-cols-1 w-full gap-3 mt-8">
-                <SuggestionButton text="Summarize the key points" onClick={(t) => setInput(t)} />
-                <SuggestionButton text="What are the main takeaways?" onClick={(t) => setInput(t)} />
-                <SuggestionButton text="Extract important entities and dates" onClick={(t) => setInput(t)} />
+                {docDetails?.suggestedQuestions && docDetails.suggestedQuestions.length > 0 ? (
+                  docDetails.suggestedQuestions.map((q: string, i: number) => (
+                    <SuggestionButton key={i} text={q} onClick={(t) => setInput(t)} />
+                  ))
+                ) : (
+                  <>
+                    <SuggestionButton text="Summarize the key points" onClick={(t) => setInput(t)} />
+                    <SuggestionButton text="What are the main takeaways?" onClick={(t) => setInput(t)} />
+                    <SuggestionButton text="Extract important entities and dates" onClick={(t) => setInput(t)} />
+                  </>
+                )}
               </div>
             </div>
           ) : (
@@ -213,7 +301,13 @@ function ChatContent() {
                       ? 'bg-primary text-primary-foreground ml-auto' 
                       : 'glass bg-background/50 border border-border/50'
                   }`}>
-                    <div className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</div>
+                    {msg.role === 'assistant' ? (
+                      <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-2 prose-code:before:content-none prose-code:after:content-none prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-pre:bg-muted/80 prose-pre:border prose-pre:border-border/50 prose-pre:rounded-xl prose-a:text-primary prose-strong:text-foreground text-sm leading-relaxed">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      <div className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</div>
+                    )}
                     
                     {/* Citations block */}
                     {msg.citations && msg.citations.length > 0 && (
@@ -289,7 +383,7 @@ function SuggestionButton({ text, onClick }: { text: string, onClick: (t: string
   return (
     <button 
       onClick={() => onClick(text)}
-      className="text-left px-4 py-3 rounded-xl border border-border/50 bg-background/30 hover:bg-muted hover:border-primary/30 transition-all text-sm font-medium text-muted-foreground hover:text-foreground"
+      className="text-left px-4 py-3 rounded-xl border border-border/50 bg-background/30 hover:bg-muted hover:border-primary/30 transition-all text-sm font-medium text-muted-foreground hover:text-foreground w-full h-auto whitespace-normal break-words"
     >
       &quot;{text}&quot;
     </button>

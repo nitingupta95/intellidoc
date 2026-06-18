@@ -6,6 +6,7 @@ import { useWorkspaceStore } from "@/store/workspace-store";
 import { Upload, FileText, Loader2, MessageSquare, Trash2, ArrowLeft, MoreVertical, CheckCircle2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import Link from "next/link";
 import { MobileDrawer } from "@/components/layout/mobile-drawer";
 import {
   Dialog,
@@ -284,7 +285,7 @@ export default function KnowledgeBaseDetailPage() {
                         <FileText size={16} />
                       </div>
                       <div className="flex flex-col">
-                        <span className="font-medium text-sm line-clamp-1">{doc.title}</span>
+                        <Link href={`/documents/${doc.id}`} className="font-medium text-sm line-clamp-1 hover:text-primary hover:underline transition-colors">{doc.title}</Link>
                         <span className="text-xs text-muted-foreground">{(doc.fileSize / 1024 / 1024).toFixed(2)} MB • {formatMimeType(doc.mimeType)}</span>
                       </div>
                     </div>
@@ -355,7 +356,7 @@ export default function KnowledgeBaseDetailPage() {
                           <div className="p-2 rounded-lg bg-primary/10 text-primary">
                             <FileText size={16} />
                           </div>
-                          <span className="font-medium group-hover:text-primary transition-colors">{doc.title}</span>
+                          <Link href={`/documents/${doc.id}`} className="font-medium group-hover:text-primary transition-colors hover:underline">{doc.title}</Link>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-muted-foreground truncate max-w-[150px]">{formatMimeType(doc.mimeType)}</td>

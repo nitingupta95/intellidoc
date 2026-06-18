@@ -63,9 +63,9 @@ export function MainSidebar() {
         
         <nav className="space-y-2 flex-1">
           <NavItem href="/dashboard" icon={<LayoutDashboard size={20} />} label="Dashboard" active={pathname === "/dashboard"} isOpen={isOpen} />
-          <NavItem href="/knowledge-bases" icon={<Database size={20} />} label="Knowledge Bases" active={pathname === "/knowledge-bases"} isOpen={isOpen} />
-          <NavItem href="/documents" icon={<Files size={20} />} label="Documents" active={pathname === "/documents"} isOpen={isOpen} />
-          <NavItem href="/chat" icon={<MessageSquare size={20} />} label="AI Chat" active={pathname.startsWith("/chat")} isOpen={isOpen} />
+          <NavItem href="/knowledge-bases" icon={<Database size={20} />} label="Knowledge Bases" active={pathname === "/knowledge-bases"} isOpen={isOpen} dataTour="nav-kb" />
+          <NavItem href="/documents" icon={<Files size={20} />} label="Documents" active={pathname === "/documents"} isOpen={isOpen} dataTour="nav-docs" />
+          <NavItem href="/chat" icon={<MessageSquare size={20} />} label="AI Chat" active={pathname.startsWith("/chat")} isOpen={isOpen} dataTour="nav-chat" />
         </nav>
 
         <div className="space-y-2 border-t border-border/50 pt-4 mt-auto">
@@ -118,11 +118,12 @@ export function MainSidebar() {
   );
 }
 
-function NavItem({ href, icon, label, active, isOpen }: { href: string; icon: React.ReactNode; label: string; active?: boolean; isOpen: boolean }) {
+function NavItem({ href, icon, label, active, isOpen, dataTour }: { href: string; icon: React.ReactNode; label: string; active?: boolean; isOpen: boolean; dataTour?: string }) {
   return (
     <Link
       href={href}
       title={!isOpen ? label : undefined}
+      data-tour={dataTour}
       className={`flex items-center ${isOpen ? "gap-3 px-3" : "justify-center px-0"} py-2 text-sm font-medium rounded-lg transition-colors ${
         active
           ? "bg-primary/10 text-primary"

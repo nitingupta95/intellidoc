@@ -12,6 +12,7 @@ from parsers.document_parser import DocumentParser
 from embeddings.semantic_chunker import SemanticChunker
 from embeddings.embedding_service import EmbeddingService
 from retrieval.qdrant_client import QdrantVectorStore
+from retrieval.reranker import reranker
 from llm.rag_chain import RAGChain
 from workers.rabbitmq_consumer import consume
 
@@ -94,15 +95,20 @@ async def chat_endpoint(request: ChatRequest, x_openai_api_key: Optional[str] = 
             gemini_api_key=x_gemini_api_key
         )
         
-        # 2. Retrieve from Vector DB (Qdrant)
+        # 2. Retrieve from Vector DB (Qdrant) with larger limit for re-ranking
         vs = get_vector_store(provider=provider, dimension=dim)
         search_results = vs.search(
             query_vector=query_vector, 
-            limit=5, 
+            limit=15, 
             workspace_id=request.workspace_id,
             knowledge_base_id=request.knowledge_base_id,
             document_ids=request.document_ids
         )
+        
+        # 2.5 Re-rank with Cross-Encoder
+        if search_results:
+            logger.info(f"Re-ranking {len(search_results)} candidates...")
+            search_results = reranker.rerank(request.query, search_results, top_k=5)
         
         # Extract text from payloads
         retrieved_docs = []
@@ -278,13 +284,29 @@ def process_document_pipeline(file_path: str, document_id: str, workspace_id: st
         vs.upsert_chunks(chunks, embeddings)
         logger.info(f"Upserted {len(chunks)} vectors to Qdrant for {document_id}")
         
+        # 5. Generate Summary and Questions
+        update_document_status(document_id, {"currentStep": "Generating Summary", "progress": 95})
+        try:
+            # Take first few chunks to summarize
+            sample_text = " ".join([c["content"] for c in chunks[:5]])
+            summary_data = asyncio.run(rag_chain.generate_summary_and_questions(
+                sample_text, 
+                openai_api_key=openai_api_key, 
+                gemini_api_key=gemini_api_key
+            ))
+        except Exception as summary_err:
+            logger.error(f"Failed to generate summary: {summary_err}")
+            summary_data = {"summary": None, "suggestedQuestions": None}
+        
         # Success!
         update_document_status(document_id, {
             "status": "INDEXED", 
             "currentStep": "Complete", 
             "progress": 100,
             "chunkCount": len(chunks),
-            "embeddingModel": f"provider: {provider}, dim: {dim}"
+            "embeddingModel": f"provider: {provider}, dim: {dim}",
+            "summary": summary_data.get("summary"),
+            "suggestedQuestions": summary_data.get("suggestedQuestions")
         })
         
     except Exception as e:

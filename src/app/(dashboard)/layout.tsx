@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { MainSidebar } from "@/components/layout/MainSidebar";
 import { WorkspaceSwitcher } from "@/components/layout/WorkspaceSwitcher";
+import { OnboardingTour } from "@/components/layout/OnboardingTour";
 
 export default function DashboardLayout({
   children,
@@ -10,6 +11,7 @@ export default function DashboardLayout({
 }) {
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden w-full">
+      <OnboardingTour />
       {/* Main Sidebar (Collapsible) */}
       <MainSidebar />
 

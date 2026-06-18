@@ -64,7 +64,7 @@ export function WorkspaceSwitcher({ isOpen = true, isMobile = false }: Workspace
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-2 px-2 h-9 border border-border/50 bg-background/50 glass-panel">
+          <Button variant="ghost" size="sm" className="gap-2 px-2 h-9 border border-border/50 bg-background/50 glass-panel" data-tour="workspace-selector">
             <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center text-primary shrink-0">
               <Building2 size={14} />
             </div>
@@ -82,7 +82,7 @@ export function WorkspaceSwitcher({ isOpen = true, isMobile = false }: Workspace
   }
 
   return (
-    <div className="mb-6 w-full">
+    <div className="mb-6 w-full" data-tour="workspace-selector">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button 
