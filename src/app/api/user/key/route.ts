@@ -33,8 +33,9 @@ export async function GET() {
     return NextResponse.json({ 
       hasOpenAIKey: !!openaiKey, 
       maskedOpenAIKey: maskedOpenAI,
-      hasGeminiKey: !!geminiKey,
-      maskedGeminiKey: maskedGemini
+      hasGeminiKey: !!geminiKey || !!process.env.GEMINI_API_KEY,
+      maskedGeminiKey: maskedGemini || (process.env.GEMINI_API_KEY ? 'System Default Key' : null),
+      isSystemGeminiKey: !geminiKey && !!process.env.GEMINI_API_KEY
     });
   } catch (error) {
     console.error('Error fetching API keys:', error);

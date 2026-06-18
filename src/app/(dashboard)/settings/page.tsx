@@ -33,6 +33,7 @@ export default function SettingsPage() {
   
   const [geminiKey, setGeminiKey] = useState("");
   const [maskedGeminiKey, setMaskedGeminiKey] = useState<string | null>(null);
+  const [isSystemGeminiKey, setIsSystemGeminiKey] = useState(false);
   
   const [isKeyLoading, setIsKeyLoading] = useState(true);
   const [isOpenAiKeySaving, setIsOpenAiKeySaving] = useState(false);
@@ -59,7 +60,10 @@ export default function SettingsPage() {
       .then(res => res.json())
       .then(data => {
         if (data.hasOpenAIKey) setMaskedOpenApiKey(data.maskedOpenAIKey);
-        if (data.hasGeminiKey) setMaskedGeminiKey(data.maskedGeminiKey);
+        if (data.hasGeminiKey) {
+          setMaskedGeminiKey(data.maskedGeminiKey);
+          setIsSystemGeminiKey(data.isSystemGeminiKey);
+        }
         setIsKeyLoading(false);
       })
       .catch(() => setIsKeyLoading(false));
@@ -228,6 +232,7 @@ export default function SettingsPage() {
       const data = await res.json();
       if (data.success) {
         setMaskedGeminiKey(geminiKey.length > 8 ? `...${geminiKey.slice(-4)}` : "...****");
+        setIsSystemGeminiKey(false);
         setGeminiKey("");
         toast.success("Gemini API Key saved successfully");
       } else {
@@ -250,7 +255,16 @@ export default function SettingsPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setMaskedGeminiKey(null);
+        // We reload to get the system key if it exists
+        const keyRes = await fetch("/api/user/key");
+        const keyData = await keyRes.json();
+        if (keyData.hasGeminiKey) {
+          setMaskedGeminiKey(keyData.maskedGeminiKey);
+          setIsSystemGeminiKey(keyData.isSystemGeminiKey);
+        } else {
+          setMaskedGeminiKey(null);
+          setIsSystemGeminiKey(false);
+        }
         toast.success("Gemini API Key revoked");
       } else {
         toast.error(data.error || "Failed to revoke Gemini API Key");
@@ -612,7 +626,7 @@ export default function SettingsPage() {
 
                       {/* Gemini Key Section */}
                       <div>
-                        {maskedGeminiKey ? (
+                        {maskedGeminiKey && !isSystemGeminiKey ? (
                           <div className="p-4 rounded-lg bg-background/30 border border-border/50 flex justify-between items-center group">
                             <div>
                               <h4 className="font-medium text-sm">Gemini API Key</h4>
@@ -625,8 +639,29 @@ export default function SettingsPage() {
                             </div>
                           </div>
                         ) : (
-                          <div className="space-y-4">
-                            <p className="text-sm text-muted-foreground">You have not set a Gemini API Key. Provide one to enable Gemini AI functionality.</p>
+                            <div className="space-y-4">
+                              {isSystemGeminiKey ? (
+                                <div className="p-4 rounded-xl bg-primary/10 border border-primary/20 text-left mb-4">
+                                  <h3 className="font-semibold text-primary text-sm mb-1">System Default Key Active</h3>
+                                  <p className="text-xs text-muted-foreground">
+                                    You are currently using the free default IntelliDoc key. You can provide your own personal API key below to override this.
+                                  </p>
+                                </div>
+                              ) : (
+                                <>
+                                  <p className="text-sm text-muted-foreground">You have not set a Gemini API Key. Provide one to enable Gemini AI functionality.</p>
+                                  
+                                  <div className="p-4 rounded-xl bg-primary/10 border border-primary/20 text-left max-w-md">
+                                    <h3 className="font-semibold text-primary text-sm mb-1">Need a free API key?</h3>
+                                    <p className="text-xs text-muted-foreground mb-3">
+                                      You can get a free Gemini API key from Google AI Studio.
+                                    </p>
+                                    <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">
+                                      <Button variant="outline" className="w-full text-xs h-8">Get Free Gemini Key</Button>
+                                    </a>
+                                  </div>
+                                </>
+                              )}
                             <div className="flex flex-col gap-2 max-w-md">
                               <label className="text-sm font-medium">Gemini API Key</label>
                               <input 

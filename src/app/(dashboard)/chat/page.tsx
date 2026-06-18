@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useWorkspaceStore } from "@/store/workspace-store";
 
 function ChatContent() {
-  const { messages, isGenerating, sendMessage, activeConversationId, conversations } = useConversationStore();
+  const { messages, isGenerating, sendMessage, activeConversationId, conversations, setActiveConversation } = useConversationStore();
   const { activeWorkspaceId } = useWorkspaceStore();
   const [input, setInput] = useState("");
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(true);
@@ -23,6 +23,9 @@ function ChatContent() {
   
   const [kbs, setKbs] = useState<any[]>([]);
   const [selectedKbId, setSelectedKbId] = useState<string>("");
+  
+  const docId = searchParams?.get("documentId") || undefined;
+  const docTitle = searchParams?.get("documentTitle") || undefined;
   
   const activeConversation = conversations.find(c => c.id === activeConversationId);
   const currentKbId = activeConversation?.knowledgeBaseId || selectedKbId;
@@ -52,12 +55,19 @@ function ChatContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isGenerating]);
 
+  // When navigating to a specific document, clear the active conversation
+  // so we start a fresh chat instead of appending to a previous one.
+  useEffect(() => {
+    if (docId) {
+      setActiveConversation(null);
+    }
+  }, [docId, setActiveConversation]);
+
   const handleSend = async () => {
     if (!input.trim() || isGenerating || !activeWorkspaceId) return;
     const userMsg = input;
     setInput("");
     
-    const docId = searchParams?.get("documentId") || undefined;
     await sendMessage(userMsg, activeWorkspaceId, currentKbId || undefined, docId);
   };
 
@@ -141,8 +151,19 @@ function ChatContent() {
                 You must provide an OpenAI or Gemini API Key to use the IntelliDoc Assistant. 
                 Please upload your API key in the settings tab to continue.
               </p>
+
+              <div className="mt-4 p-4 rounded-xl bg-primary/10 border border-primary/20 text-left w-full">
+                <h3 className="font-semibold text-primary text-sm mb-1">Need a free API key?</h3>
+                <p className="text-xs text-muted-foreground mb-3">
+                  You can get a free Gemini API key from Google AI Studio. 
+                  (Admin: Update this link if you want to provide your own API keys)
+                </p>
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">
+                  <Button variant="outline" className="w-full text-xs h-8">Get Free Gemini Key</Button>
+                </a>
+              </div>
               
-              <div className="mt-8">
+              <div className="mt-6 w-full">
                 <Link href="/settings">
                   <Button className="w-full">
                     Go to Settings
@@ -155,15 +176,27 @@ function ChatContent() {
               <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary mb-4">
                 <MessageSquare size={32} />
               </div>
-              <h2 className="text-2xl font-heading font-semibold">How can I help you today?</h2>
+              <h2 className="text-2xl font-heading font-semibold">
+                {docTitle ? `Chat with ${docTitle}` : "How can I help you today?"}
+              </h2>
               <p className="text-muted-foreground text-sm">
-                Ask me anything about your uploaded documents. I&apos;ll search through the knowledge base and provide cited answers.
+                {docTitle 
+                  ? "Ask me anything about this document. I'll search through it and provide cited answers."
+                  : "Select a document from the dropdown above, or ask a general question. If you haven't uploaded any PDFs yet, head over to the Documents section."}
               </p>
               
+              {!docTitle && (
+                <div className="flex gap-4 mt-2">
+                  <Link href="/documents">
+                    <Button variant="outline" className="text-sm">Upload a PDF Document</Button>
+                  </Link>
+                </div>
+              )}
+              
               <div className="grid grid-cols-1 w-full gap-3 mt-8">
-                <SuggestionButton text="Summarize the Q3 Financial Report" onClick={(t) => setInput(t)} />
-                <SuggestionButton text="What are our remote work policies?" onClick={(t) => setInput(t)} />
-                <SuggestionButton text="Extract key entities from Project Alpha" onClick={(t) => setInput(t)} />
+                <SuggestionButton text="Summarize the key points" onClick={(t) => setInput(t)} />
+                <SuggestionButton text="What are the main takeaways?" onClick={(t) => setInput(t)} />
+                <SuggestionButton text="Extract important entities and dates" onClick={(t) => setInput(t)} />
               </div>
             </div>
           ) : (
