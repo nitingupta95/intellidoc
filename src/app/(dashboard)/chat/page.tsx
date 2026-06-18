@@ -125,9 +125,9 @@ function ChatContent() {
     <div className="h-full flex overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-700 bg-background/50">
       {isChatSidebarOpen && <ChatSidebar className="hidden lg:flex" />}
       
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 relative">
         {/* Chat Header */}
-        <header className="relative z-50 h-16 border-b border-border/50 flex items-center justify-between px-4 md:px-6 shrink-0 glass-panel gap-2">
+        <header className="absolute top-0 left-0 right-0 z-50 h-16 bg-background/40 backdrop-blur-md border-b border-white/10 dark:border-white/5 flex items-center justify-between px-4 md:px-6 shrink-0 shadow-sm transition-all duration-300">
           <div className="flex items-center gap-2 md:gap-3 min-w-0">
             <Drawer>
               <DrawerTrigger asChild>
@@ -220,7 +220,7 @@ function ChatContent() {
         </header>
 
         {/* Chat Messages Area */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 scrollbar-thin">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 pt-20 md:pt-24 space-y-6 scrollbar-thin">
           {hasKey === false ? (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-6 max-w-md mx-auto mt-10">
               <div className="w-16 h-16 rounded-full bg-destructive/10 border border-destructive/20 flex items-center justify-center text-destructive mb-4">
@@ -288,18 +288,18 @@ function ChatContent() {
               </div>
             </div>
           ) : (
-            <div className="space-y-6 max-w-4xl mx-auto">
+            <div className="space-y-6 max-w-4xl mx-auto pb-32">
               {messages.map((msg: any, idx: number) => (
-                <div key={msg.id} className={`flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div key={msg.id} className={`flex gap-3 md:gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   {msg.role === 'assistant' && (
-                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0 mt-1 border border-primary/30">
+                    <div className="w-8 h-8 rounded-full bg-background/80 backdrop-blur-sm flex items-center justify-center shrink-0 mt-1 border border-primary/20 shadow-sm relative overflow-hidden">
                       <BrainCircuit size={16} className="text-primary" />
                     </div>
                   )}
-                  <div className={`max-w-[80%] rounded-2xl p-4 ${
+                  <div className={`max-w-[85%] sm:max-w-[75%] p-4 shadow-sm transition-all ${
                     msg.role === 'user' 
-                      ? 'bg-primary text-primary-foreground ml-auto' 
-                      : 'glass bg-background/50 border border-border/50'
+                      ? 'bg-gradient-to-br from-primary to-primary/80 text-primary-foreground ml-auto rounded-3xl rounded-tr-sm' 
+                      : 'glass-panel bg-background/60 backdrop-blur-xl border border-white/20 dark:border-white/10 rounded-3xl rounded-tl-sm'
                   }`}>
                     {msg.role === 'assistant' ? (
                       <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-2 prose-code:before:content-none prose-code:after:content-none prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-pre:bg-muted/80 prose-pre:border prose-pre:border-border/50 prose-pre:rounded-xl prose-a:text-primary prose-strong:text-foreground text-sm leading-relaxed">
@@ -346,17 +346,17 @@ function ChatContent() {
           )}
         </div>
 
-        {/* Chat Input Area */}
-        <div className="p-3 md:p-4 border-t border-border/50 glass-panel shrink-0 pb-[calc(env(safe-area-inset-bottom)+12px)] md:pb-4">
-          <div className="max-w-4xl mx-auto relative">
-            <div className="bg-background/80 rounded-2xl border border-border/50 flex items-end p-1.5 md:p-2 focus-within:ring-2 focus-within:ring-primary/50 focus-within:border-primary/50 transition-all shadow-sm">
+        {/* Floating Chat Input Area */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 pointer-events-none bg-gradient-to-t from-background via-background/90 to-transparent pt-12 pb-[calc(env(safe-area-inset-bottom)+16px)] z-40">
+          <div className="max-w-4xl mx-auto relative pointer-events-auto px-2">
+            <div className="glass-panel bg-background/70 backdrop-blur-2xl rounded-[32px] border border-white/20 dark:border-white/10 flex items-end p-2 focus-within:ring-2 focus-within:ring-primary/50 focus-within:border-primary/50 transition-all shadow-xl">
               <textarea 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={hasKey === false ? "Please add an API key first..." : "Ask a question..."}
                 disabled={hasKey === false}
-                className="flex-1 bg-transparent border-none focus:ring-0 resize-none min-h-[44px] max-h-[150px] md:max-h-[200px] py-3 px-2 text-[16px] md:text-sm leading-relaxed placeholder:text-muted-foreground scrollbar-thin outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 bg-transparent border-none focus:ring-0 resize-none min-h-[44px] max-h-[150px] md:max-h-[200px] py-3 px-4 text-[16px] md:text-sm leading-relaxed placeholder:text-muted-foreground scrollbar-thin outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                 rows={1}
               />
               
@@ -364,12 +364,12 @@ function ChatContent() {
                 onClick={handleSend} 
                 disabled={!input.trim() || isGenerating || hasKey === false}
                 size="icon" 
-                className="rounded-full shrink-0 mb-0.5 md:mb-1 h-10 w-10 transition-transform active:scale-95"
+                className="rounded-full shrink-0 mb-1 mr-1 h-10 w-10 transition-transform hover:scale-105 active:scale-95 bg-gradient-to-r from-primary to-primary/80 hover:from-primary hover:to-primary shadow-md border border-primary/20"
               >
-                {isGenerating ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} className="ml-1" />}
+                {isGenerating ? <Loader2 size={18} className="animate-spin text-primary-foreground" /> : <Send size={18} className="ml-1 text-primary-foreground" />}
               </Button>
             </div>
-            <div className="text-center mt-2 md:mt-3 text-[10px] md:text-xs text-muted-foreground hidden sm:block">
+            <div className="text-center mt-3 text-[10px] md:text-xs text-muted-foreground hidden sm:block font-medium drop-shadow-sm">
               IntelliDoc AI can make mistakes. Verify important information using the provided citations.
             </div>
           </div>

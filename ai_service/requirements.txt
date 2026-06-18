@@ -19,6 +19,5 @@ PyMuPDF>=1.24.5
 docx2txt>=0.8
 google-generativeai>=0.5.4
 langchain-google-genai>=1.0.6
-sentence-transformers>=3.0.0
 pytesseract>=0.3.10
 pdf2image>=1.17.0

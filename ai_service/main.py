@@ -131,6 +131,7 @@ async def chat_endpoint(request: ChatRequest, x_openai_api_key: Optional[str] = 
             # Yield citations first as a metadata event
             yield f"data: {{\"event\": \"citations\", \"data\": {citations}}}\n\n"
             
+            import json
             async for chunk in rag_chain.stream_answer(
                 request.query, 
                 retrieved_docs, 
@@ -138,8 +139,8 @@ async def chat_endpoint(request: ChatRequest, x_openai_api_key: Optional[str] = 
                 openai_api_key=x_openai_api_key,
                 gemini_api_key=x_gemini_api_key
             ):
-                # Format as Server-Sent Events (SSE)
-                yield f"data: {chunk}\n\n"
+                # Format as Server-Sent Events (SSE) safely using json.dumps
+                yield f"data: {json.dumps(chunk)}\n\n"
                 
             yield "data: [DONE]\n\n"
 

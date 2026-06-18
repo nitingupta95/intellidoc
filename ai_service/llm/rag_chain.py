@@ -8,7 +8,7 @@ from core.config import settings
 class RAGChain:
     def __init__(self):
         self.prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are IntelliDoc AI, an expert document intelligence assistant. Answer the user's question based strictly on the following context. If you don't know the answer based on the context, say so. Always cite your sources.\n\nContext:\n{context}"),
+            ("system", "You are IntelliDoc AI, an expert document intelligence assistant. Answer the user's question based strictly on the following context. If you don't know the answer based on the context, say so. Always cite your sources. MUST format your response in rich Markdown, using newlines, bold text, and bullet points to make it highly readable and well-structured.\n\nContext:\n{context}"),
             MessagesPlaceholder(variable_name="history"),
             ("human", "{question}")
         ])

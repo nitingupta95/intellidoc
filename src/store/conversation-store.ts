@@ -199,8 +199,10 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
             }
             try {
               const json = JSON.parse(dataStr);
-              if (json.event === 'citations') {
+              if (json && typeof json === 'object' && json.event === 'citations') {
                 get().setCitationsToLastMessage(json.data);
+              } else if (typeof json === 'string') {
+                get().appendStreamToLastMessage(json);
               } else {
                 get().appendStreamToLastMessage(dataStr);
               }
