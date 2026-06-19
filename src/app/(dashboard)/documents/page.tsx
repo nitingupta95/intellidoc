@@ -508,13 +508,13 @@ export default function DocumentsPage() {
             <div className="hidden md:block glass-panel overflow-hidden border border-border/50">
               <table className="w-full text-left text-sm table-fixed">
             <colgroup>
-              <col className="w-[40%]" />
+              <col className="w-[32%]" />
               <col className="w-[8%]" />
               <col className="w-[10%]" />
-              <col className="w-[15%]" />
+              <col className="w-[12%]" />
               <col className="w-[10%]" />
-              <col className="w-[10%]" />
-              <col className="w-[7%]" />
+              <col className="w-[12%]" />
+              <col className="w-[16%]" />
             </colgroup>
             <thead className="bg-background/40 border-b border-border/50">
               <tr>
