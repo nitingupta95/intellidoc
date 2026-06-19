@@ -171,8 +171,12 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
               }
               try {
                 const json = JSON.parse(dataStr);
-                if (json.event === 'citations') {
+                if (json && typeof json === 'object' && json.event === 'citations') {
                   citationsData = json.data;
+                } else if (typeof json === 'string') {
+                  fullAssistantContent += json;
+                } else {
+                  fullAssistantContent += dataStr;
                 }
               } catch {
                 if (dataStr && !dataStr.startsWith('{')) {
