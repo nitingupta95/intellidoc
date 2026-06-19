@@ -4,7 +4,26 @@ import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Search, BrainCircuit, Users, ArrowRight, Sun, Moon } from "lucide-react";
+import {
+  Search,
+  BrainCircuit,
+  Users,
+  ArrowRight,
+  Sun,
+  Moon,
+  FileText,
+  FolderOpen,
+  Share2,
+  Download,
+  Shield,
+  BarChart3,
+  MessageSquare,
+  Sparkles,
+  Key,
+  Mail,
+  Layers,
+  Zap,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 function WorkspaceShowcase() {
@@ -135,22 +154,85 @@ export default function Home() {
     setMounted(true);
   }, []);
 
-  const cards = [
+  const coreFeatures = [
     {
       icon: <Search className="w-5 h-5 text-gray-700 dark:text-gray-50" />,
       title: "Semantic Search",
-      description: "Find meaning across millions of tokens, powered by advanced vector embeddings.",
+      description: "Find meaning across millions of tokens, powered by advanced vector embeddings and cross-encoder re-ranking.",
     },
     {
       icon: <BrainCircuit className="w-5 h-5 text-gray-700 dark:text-gray-50" />,
       title: "Citation-Backed AI",
-      description: "Receive verifiable answers with pinpoint source citations and confidence scores.",
+      description: "Receive verifiable answers with pinpoint source citations and confidence scores. Powered by Gemini or GPT-4o.",
     },
     {
       icon: <Users className="w-5 h-5 text-gray-700 dark:text-gray-50" />,
       title: "Team Workspaces",
-      description: "Collaborate seamlessly. Invite members, manage roles, and share knowledge bases securely.",
-    }
+      description: "Collaborate seamlessly. Invite members, assign Owner/Admin/Member roles, and share knowledge bases securely.",
+    },
+  ];
+
+  const allFeatures = [
+    {
+      icon: <FileText className="w-5 h-5" />,
+      title: "Multi-Format Upload",
+      description: "Upload PDFs, DOCX, PPTX, TXT, Markdown, CSV, and JSON with real-time progress tracking.",
+    },
+    {
+      icon: <FolderOpen className="w-5 h-5" />,
+      title: "Folder Organization",
+      description: "Organize documents in nested folders within workspaces. Navigate with breadcrumb navigation.",
+    },
+    {
+      icon: <Sparkles className="w-5 h-5" />,
+      title: "Auto Summaries",
+      description: "AI-generated document summaries and suggested starter questions upon upload completion.",
+    },
+    {
+      icon: <MessageSquare className="w-5 h-5" />,
+      title: "RAG Chat",
+      description: "Chat with your documents using retrieval-augmented generation with streaming responses.",
+    },
+    {
+      icon: <Download className="w-5 h-5" />,
+      title: "Chat Export",
+      description: "Export conversations as beautiful Markdown files or professional PDF documents.",
+    },
+    {
+      icon: <Share2 className="w-5 h-5" />,
+      title: "Shared Links",
+      description: "Generate secure, expiring links to share documents and conversations with anyone.",
+    },
+    {
+      icon: <Layers className="w-5 h-5" />,
+      title: "Knowledge Bases",
+      description: "Group documents into Knowledge Bases for scoped retrieval and team-focused conversations.",
+    },
+    {
+      icon: <Shield className="w-5 h-5" />,
+      title: "Security & RBAC",
+      description: "Role-based access control with Owner, Admin, and Member roles. Isolated workspace data silos.",
+    },
+    {
+      icon: <BarChart3 className="w-5 h-5" />,
+      title: "Analytics Dashboard",
+      description: "Track documents, query volume, storage usage, and active users with interactive charts.",
+    },
+    {
+      icon: <Key className="w-5 h-5" />,
+      title: "Bring Your Own Key",
+      description: "Use your own OpenAI or Gemini API key, or use the free system default for instant access.",
+    },
+    {
+      icon: <Mail className="w-5 h-5" />,
+      title: "Email Invitations",
+      description: "Send beautifully designed email invitations for workspace onboarding via SMTP.",
+    },
+    {
+      icon: <Zap className="w-5 h-5" />,
+      title: "Real-Time Processing",
+      description: "Async document pipeline with live status updates — from upload to indexed in seconds.",
+    },
   ];
 
   const logos = ["OpenAI", "Vercel", "Stripe", "Linear", "Anthropic"];
@@ -223,7 +305,7 @@ export default function Home() {
           transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
           className="mt-8 text-lg sm:text-xl text-gray-500 dark:text-gray-50 max-w-2xl leading-relaxed"
         >
-          Upload documents, semantic search, AI chat, verifiable citations, and rapid knowledge discovery. All in one quiet, confident workspace.
+          Upload documents, semantic search, AI chat with citations, auto-generated summaries, shared links, folder organization, and team workspaces. All in one quiet, confident platform.
         </motion.p>
 
         {/* CTAs */}
@@ -260,9 +342,9 @@ export default function Home() {
           </div>
         </motion.div>
 
-        {/* Feature Cards */}
+        {/* Core Feature Cards */}
         <div className="mt-32 grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-6xl text-left">
-          {cards.map((card, idx) => (
+          {coreFeatures.map((card, idx) => (
             <motion.div
               key={idx}
               initial={{ opacity: 0, y: 20 }}
@@ -284,6 +366,75 @@ export default function Home() {
 
         {/* WORKSPACE SHOWCASE */}
         <WorkspaceShowcase />
+
+        {/* Full Feature Grid */}
+        <div className="mt-40 w-full max-w-6xl">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-gray-900 dark:text-white mb-4">
+              Everything You Need, Built In.
+            </h2>
+            <p className="text-gray-500 dark:text-gray-50 max-w-2xl mx-auto">
+              From document upload to AI-powered insights, IntelliDoc brings together every tool your team needs for intelligent document management.
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 text-left">
+            {allFeatures.map((feature, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-50px" }}
+                transition={{ duration: 0.6, delay: idx * 0.05, ease: [0.16, 1, 0.3, 1] }}
+                className="group flex gap-4 p-5 rounded-xl bg-white/50 dark:bg-white/[0.02] border border-black/5 dark:border-white/5 hover:bg-gray-50 hover:border-black/10 dark:hover:bg-white/[0.04] dark:hover:border-white/10 transition-all duration-300 cursor-default"
+              >
+                <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-white/5 border border-black/5 dark:border-white/10 flex items-center justify-center shrink-0 text-gray-600 dark:text-gray-50 group-hover:scale-105 transition-transform duration-300">
+                  {feature.icon}
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">{feature.title}</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-50 leading-relaxed">
+                    {feature.description}
+                  </p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+
+        {/* CTA Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+          className="mt-40 w-full max-w-3xl text-center"
+        >
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-gray-900 dark:text-white mb-4">
+            Ready to Transform Your Documents?
+          </h2>
+          <p className="text-gray-500 dark:text-gray-50 max-w-xl mx-auto mb-10">
+            Start for free with a Gemini API key — no credit card required. Upload your first document in under 30 seconds.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Button asChild size="lg" className="bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90 rounded-full px-10 h-12 text-sm font-medium shadow-[0_0_20px_rgba(0,0,0,0.1)] dark:shadow-[0_0_20px_rgba(255,255,255,0.1)] cursor-pointer">
+              <Link href="/register">
+                Get Started Free <ArrowRight className="ml-2 w-4 h-4" />
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="lg" className="bg-transparent border-black/10 hover:bg-black/5 text-gray-900 dark:border-white/10 dark:hover:bg-white/5 dark:text-white rounded-full px-8 h-12 text-sm font-medium cursor-pointer">
+              <Link href="/contact">
+                Contact Us
+              </Link>
+            </Button>
+          </div>
+        </motion.div>
 
       </main>
 
