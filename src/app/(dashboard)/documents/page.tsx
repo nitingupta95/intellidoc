@@ -505,8 +505,17 @@ export default function DocumentsPage() {
             </div>
 
             {/* Desktop Table View */}
-            <div className="hidden md:block glass-panel overflow-x-auto border border-border/50">
-              <table className="w-full text-left text-sm whitespace-nowrap min-w-[800px]">
+            <div className="hidden md:block glass-panel overflow-hidden border border-border/50">
+              <table className="w-full text-left text-sm table-fixed">
+            <colgroup>
+              <col className="w-[40%]" />
+              <col className="w-[8%]" />
+              <col className="w-[10%]" />
+              <col className="w-[15%]" />
+              <col className="w-[10%]" />
+              <col className="w-[10%]" />
+              <col className="w-[7%]" />
+            </colgroup>
             <thead className="bg-background/40 border-b border-border/50">
               <tr>
                 <th className="px-6 py-4 font-medium text-muted-foreground">Name</th>
@@ -522,11 +531,11 @@ export default function DocumentsPage() {
                 {displayedFolders.map((folder: any) => (
                   <tr key={`folder-${folder.id}`} className="hover:bg-background/30 transition-colors group cursor-pointer" onClick={() => setCurrentFolderId(folder.id)}>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500 shrink-0">
                           <FolderIcon size={16} />
                         </div>
-                        <span className="font-medium group-hover:text-primary transition-colors">{folder.name}</span>
+                        <span className="font-medium group-hover:text-primary transition-colors truncate">{folder.name}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-muted-foreground">Folder</td>
@@ -542,18 +551,18 @@ export default function DocumentsPage() {
                 (doc: any, i: number) => (
                 <tr key={doc.id || i} className="hover:bg-background/30 transition-colors group">
                   <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
                         <FileText size={16} />
                       </div>
-                      <Link href={`/documents/${doc.id}`} className="font-medium group-hover:text-primary transition-colors hover:underline">
+                      <Link href={`/documents/${doc.id}`} className="font-medium group-hover:text-primary transition-colors hover:underline truncate" title={doc.title || doc.filename}>
                         {doc.title || doc.filename}
                       </Link>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-muted-foreground truncate max-w-[150px]">{formatMimeType(doc.mimeType)}</td>
-                  <td className="px-6 py-4 text-muted-foreground">{(doc.fileSize / 1024 / 1024).toFixed(2)} MB</td>
-                  <td className="px-6 py-4 text-muted-foreground">{doc.user?.name || "Unknown"}</td>
+                  <td className="px-6 py-4 text-muted-foreground truncate">{formatMimeType(doc.mimeType)}</td>
+                  <td className="px-6 py-4 text-muted-foreground truncate">{(doc.fileSize / 1024 / 1024).toFixed(2)} MB</td>
+                  <td className="px-6 py-4 text-muted-foreground truncate">{doc.user?.name || "Unknown"}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       {doc.status === 'INDEXED' ? (
