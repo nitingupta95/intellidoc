@@ -7,9 +7,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { auth } from "@/auth";
-import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
+import { getDashboardData } from "@/lib/dashboard-data";
+import { StatCard } from "@/components/dashboard/stat-card";
+import { ActivityRow } from "@/components/dashboard/activity-row";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -18,118 +20,14 @@ export default async function DashboardPage() {
   }
 
   const userId = session.user.id;
-
-  // 1. Total Documents
-  const totalDocuments = await db.document.count({
-    where: { workspace: { members: { some: { userId } } } },
-  });
-
-  // 2. AI Queries
-  const aiQueries = await db.message.count({
-    where: {
-      role: "user",
-      conversation: { workspace: { members: { some: { userId } } } },
-    },
-  });
-
-  // 3. Avg Confidence
-  const assistantMessages = await db.message.findMany({
-    where: {
-      role: "assistant",
-      conversation: { workspace: { members: { some: { userId } } } },
-      confidence: { not: null },
-    },
-    select: { confidence: true },
-  });
-  
-  let avgConfidence = 0;
-  if (assistantMessages.length > 0) {
-    const sum = assistantMessages.reduce((acc, msg) => acc + (msg.confidence || 0), 0);
-    avgConfidence = (sum / assistantMessages.length) * 100; // Assuming confidence is 0-1
-    // If it's already 0-100, we don't multiply by 100. Let's assume it's 0-1.
-  }
-
-  // 4. Time Saved (5 mins per query)
-  const timeSavedHours = Math.round((aiQueries * 5) / 60);
-
-  // 5. Recent Knowledge Activity
-  const recentDocs = await db.document.findMany({
-    where: { workspace: { members: { some: { userId } } } },
-    orderBy: { createdAt: "desc" },
-    take: 5,
-    select: { id: true, filename: true, createdAt: true },
-  });
-
-  const recentConvos = await db.conversation.findMany({
-    where: { workspace: { members: { some: { userId } } } },
-    orderBy: { createdAt: "desc" },
-    take: 5,
-    select: { id: true, title: true, createdAt: true },
-  });
-
-  const activity = [
-    ...recentDocs.map(d => ({
-      id: d.id,
-      type: "document",
-      title: `Uploaded '${d.filename}'`,
-      date: d.createdAt,
-    })),
-    ...recentConvos.map(c => ({
-      id: c.id,
-      type: "conversation",
-      title: `Asked about '${c.title}'`,
-      date: c.createdAt,
-    })),
-  ].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 4);
-
-  // 6. AI Insights (Dynamic based on DB)
-  const insights = [];
-  
-  // Example insight: Recent upload cluster
-  if (recentDocs.length > 0) {
-    insights.push({
-      id: "cluster",
-      type: "cluster",
-      title: "New Topic Indexed",
-      body: `You recently uploaded '${recentDocs[0].filename}'. Our AI is now ready to answer questions about it.`,
-      button: "Ask a Question",
-      href: "/chat",
-      color: "green",
-    });
-  } else {
-    insights.push({
-      id: "cluster",
-      type: "cluster",
-      title: "Workspace Empty",
-      body: `Upload your first document to start building your intelligent knowledge base.`,
-      button: "Upload Document",
-      href: "/documents",
-      color: "green",
-    });
-  }
-
-  // Example insight: Confidence / Gap
-  if (avgConfidence > 0 && avgConfidence < 80) {
-    insights.push({
-      id: "gap",
-      type: "gap",
-      title: "Knowledge Gap Detected",
-      body: `Your recent AI queries have lower confidence. Consider uploading more detailed documents.`,
-      button: "Review Queries",
-      href: "/chat",
-      color: "purple",
-    });
-  } else {
-    insights.push({
-      id: "gap",
-      type: "gap",
-      title: "High Confidence Answers",
-      body: `Your knowledge base is well-stocked. The AI is answering with high confidence!`,
-      button: "View Analytics",
-      href: "/dashboard",
-      color: "purple",
-    });
-  }
+  const {
+    totalDocuments,
+    aiQueries,
+    avgConfidence,
+    timeSavedHours,
+    activity,
+    insights,
+  } = await getDashboardData(userId);
 
   return (
     <div className="h-full flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-y-auto overflow-x-hidden pb-6">
@@ -246,39 +144,6 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ title, value, change, icon, iconBg }: { title: string, value: string, change: string, icon: React.ReactNode, iconBg: string }) {
-  return (
-    <div className="glass-panel p-5 border border-border/50 flex flex-col justify-between">
-      <div className="flex justify-between items-start mb-4">
-        <h3 className="text-sm text-muted-foreground">{title}</h3>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${iconBg}`}>
-          {icon}
-        </div>
-      </div>
-      <div className="flex items-baseline gap-2">
-        <span className="text-2xl md:text-3xl font-bold text-foreground">{value}</span>
-        <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-          {change}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function ActivityRow({ icon, title, meta, isLast = false }: { icon: React.ReactNode, title: string, meta: string, isLast?: boolean }) {
-  return (
-    <div className={`flex items-center gap-3 py-3 ${!isLast ? 'border-b border-border/50' : ''}`}>
-      <div className="w-9 h-9 bg-foreground/5 rounded-full flex items-center justify-center shrink-0">
-        {icon}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm text-foreground truncate">{title}</p>
-        <p className="text-xs text-muted-foreground mt-0.5">{meta}</p>
       </div>
     </div>
   );

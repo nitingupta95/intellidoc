@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useTheme } from "next-themes";
 import { LogoutButton } from "@/components/layout/logout-button";
 import { WorkspaceSwitcher } from "@/components/layout/WorkspaceSwitcher";
 import {
@@ -16,9 +15,7 @@ import {
   CreditCard,
   PanelLeftClose,
   PanelLeftOpen,
-  User,
-  Sun,
-  Moon
+  User
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -26,7 +23,6 @@ export function MainSidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(true);
   const { data: session } = useSession();
-  const { theme, setTheme } = useTheme();
 
   const user = session?.user;
   const nameParts = user?.name ? user.name.split(" ") : [];
@@ -73,21 +69,6 @@ export function MainSidebar() {
           <NavItem href="/settings" icon={<Settings size={20} />} label="Settings" active={pathname === "/settings"} isOpen={isOpen} />
           
           <div className="pt-4 mt-4 border-t border-border/50 space-y-4">
-            <div className={`flex items-center ${isOpen ? "justify-between px-2" : "justify-center"}`}>
-              {isOpen && <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Appearance</span>}
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-8 w-8 rounded-full" 
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                title={isOpen ? undefined : "Toggle Theme"}
-              >
-                <Sun size={18} className="rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0 text-muted-foreground" />
-                <Moon size={18} className="absolute rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100 text-muted-foreground" />
-                <span className="sr-only">Toggle theme</span>
-              </Button>
-            </div>
-
             <div className={`flex items-center ${isOpen ? "gap-3 px-2" : "justify-center"}`}>
               <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary shrink-0 border border-primary/30 overflow-hidden">
                 {user?.image ? (

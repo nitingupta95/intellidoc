@@ -3,7 +3,7 @@ import pino from 'pino';
 
 const logger = pino({ name: 'redis-client' });
 
-// Define global interface for TypeScript to preserve the client across HMR (Hot Module Replacement)
+ 
 declare global {
   // eslint-disable-next-line no-var
   var redisClient: Redis | undefined;
@@ -20,12 +20,12 @@ export class RedisConnectionError extends Error {
 
 function createRedisClient(): Redis {
   const client = new Redis(REDIS_URL, {
-    lazyConnect: true, // We'll connect manually when needed
+    lazyConnect: true, 
     maxRetriesPerRequest: null,
     retryStrategy(times) {
       if (times > 5) {
         logger.error('Redis reconnect strategy exhausted after 5 attempts.');
-        return null; // Stop retrying
+        return null; 
       }
       const delay = Math.min(times * 50, 1000);
       logger.info({ retries: times, delay }, 'Reconnecting to Redis...');
@@ -49,10 +49,7 @@ if (process.env.NODE_ENV !== 'production') {
   globalThis.redisClient = client;
 }
 
-/**
- * Returns a Promise that resolves to a connected Redis client instance.
- * Automatically attempts to connect if not already connected.
- */
+ 
 export async function getRedisClient(): Promise<Redis> {
   if (client.status === 'wait') {
     try {
@@ -64,10 +61,7 @@ export async function getRedisClient(): Promise<Redis> {
   return client;
 }
 
-/**
- * Pings the Redis server to check connection health.
- * Intended for use in /api/health routes.
- */
+ 
 export async function checkRedisHealth(): Promise<boolean> {
   try {
     const c = await getRedisClient();

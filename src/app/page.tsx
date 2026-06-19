@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
@@ -9,8 +8,6 @@ import {
   BrainCircuit,
   Users,
   ArrowRight,
-  Sun,
-  Moon,
   FileText,
   FolderOpen,
   Share2,
@@ -147,7 +144,6 @@ function WorkspaceShowcase() {
 }
 
 export default function Home() {
-  const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -256,14 +252,6 @@ export default function Home() {
             <span className="text-sm font-medium tracking-wide">IntelliDoc</span>
           </div>
           <nav className="flex items-center gap-6 text-sm">
-            {mounted && (
-              <button
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                className="text-gray-500 hover:text-gray-900 dark:text-gray-50 dark:hover:text-white transition-colors cursor-pointer"
-              >
-                {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-              </button>
-            )}
             <Link href="/login" className="text-gray-500 hover:text-gray-900 dark:text-gray-50 dark:hover:text-white transition-colors hidden sm:block">
               Sign In
             </Link>
