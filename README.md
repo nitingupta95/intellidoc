@@ -528,6 +528,487 @@ Ready for Chat & Search
 
 ---
 
+## 🏗️ System Design & Future Scaling
+
+IntelliDoc is architected with **progressive scalability** in mind — start simple, scale deliberately. The system is designed so that every component can be independently scaled or replaced without rewriting application code.
+
+### Current Architecture (Small Scale — MVP / Early Production)
+
+The current deployment model is optimized for **speed-to-market, low cost, and zero server administration**:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           CURRENT DEPLOYMENT                                │
+│                       (Serverless / Managed Services)                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ┌──────────────┐     ┌──────────────┐     ┌──────────────────────┐       │
+│   │   Vercel      │     │   Render      │     │   Managed Services   │       │
+│   │  (Frontend)   │────▶│  (AI Service) │────▶│                      │       │
+│   │  Edge + SSR   │     │  Single Inst. │     │  • Neon (Postgres)   │       │
+│   │  Auto-scales  │     │  Free/Starter │     │  • Qdrant Cloud      │       │
+│   └──────────────┘     └──────────────┘     │  • CloudAMQP          │       │
+│                                              │  • Cloudflare R2      │       │
+│                                              │  • Redis Cloud        │       │
+│                                              └──────────────────────┘       │
+│                                                                             │
+│   Cost: ~$0–$50/month  │  Users: 1–500  │  Documents: <10K                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Why this works for small scale:**
+
+| Aspect | Justification |
+|--------|---------------|
+| **Frontend (Vercel)** | Automatic edge caching, serverless functions, global CDN, zero-config SSL. Handles traffic spikes natively via edge functions. |
+| **AI Service (Render)** | Single-instance deployment is sufficient when document processing is async via RabbitMQ. The main API (`/chat`, `/retrieve`) is lightweight and serves one request at a time with streaming. |
+| **Database (Neon)** | Serverless Postgres with auto-suspend. Scales to zero when idle, handles connection pooling automatically. Perfect for variable traffic patterns. |
+| **Queue (CloudAMQP)** | Managed RabbitMQ eliminates the need to monitor queue health. The free tier supports up to 1M messages/month, which covers ~10K document uploads. |
+| **Vector DB (Qdrant Cloud)** | Managed vector search with built-in HNSW indexing. No need to tune ANN parameters or manage index sharding at this scale. |
+
+> **💡 Key Design Decision:** All service-to-service communication uses environment variables (`QDRANT_URL`, `RABBITMQ_URL`, `DATABASE_URL`). This means switching from a managed service to a self-hosted service (or vice-versa) requires only changing the URL — no code changes.
+
+---
+
+### Scaling Stage 1: Vertical Scaling & Optimization (500–5,000 Users)
+
+Before reaching for Kubernetes, there are several optimizations that provide **10x throughput without infrastructure changes**:
+
+#### 1.1 — AI Service Horizontal Scaling on Render
+
+```
+                    ┌──────────────────────┐
+                    │    Load Balancer      │
+                    │    (Render built-in)  │
+                    └──────┬───────┬───────┘
+                           │       │
+                    ┌──────▼──┐ ┌──▼──────┐
+                    │ Worker 1│ │ Worker 2│   ← Render allows scaling
+                    │ FastAPI │ │ FastAPI │      to multiple instances
+                    └─────────┘ └─────────┘
+```
+
+- Scale Render to **2–4 instances** of the AI Service ($25–$50/month each).
+- RabbitMQ naturally distributes document processing jobs across multiple consumers — no code changes needed.
+- Each worker competes for messages from the queue, providing **automatic load distribution**.
+
+#### 1.2 — Database Connection Pooling
+
+```python
+# Current: Direct connection (fine for <50 concurrent queries)
+DATABASE_URL=postgresql://user:pass@host/db
+
+# Scaled: Connection pooling via PgBouncer or Neon's built-in pooler
+DATABASE_URL=postgresql://user:pass@host/db?pgbouncer=true&connection_limit=50
+```
+
+- Neon provides built-in connection pooling. Switch to pooled connection strings.
+- Add Redis caching for frequently accessed data (workspace metadata, user profiles, subscription status).
+- Add database indexes for hot query paths (document listing, conversation history).
+
+#### 1.3 — CDN & Static Asset Optimization
+
+- Vercel already handles this, but add explicit `Cache-Control` headers for API responses.
+- Cache document metadata responses in Redis with a 60-second TTL.
+- Serve pre-signed S3 download URLs directly from the frontend, bypassing the API for file downloads.
+
+#### 1.4 — Embedding Batch Processing
+
+- Currently, documents are embedded one chunk at a time. Batch embeddings requests (Gemini supports up to 100 texts per `embed_content` call) for **5–10x faster document processing**.
+- Implement a priority queue in RabbitMQ: small documents (< 5 pages) get fast-tracked, large documents (100+ pages) are processed in a background priority.
+
+---
+
+### Scaling Stage 2: Kubernetes & Container Orchestration (5,000–100,000+ Users)
+
+When managed services hit their limits (cost, latency, compliance), move to a **self-hosted Kubernetes cluster** on AWS EKS, GKE, or Azure AKS.
+
+#### 2.1 — Production Kubernetes Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                         KUBERNETES CLUSTER (AWS EKS / GKE)                          │
+│                                                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐    │
+│  │                        INGRESS CONTROLLER (NGINX)                          │    │
+│  │               TLS Termination • Rate Limiting • Path Routing               │    │
+│  └──────────┬──────────────────────┬──────────────────────┬───────────────────┘    │
+│             │                      │                      │                        │
+│  ┌──────────▼──────────┐ ┌────────▼─────────┐ ┌─────────▼─────────┐              │
+│  │   NAMESPACE: web     │ │ NAMESPACE: ai     │ │ NAMESPACE: data   │              │
+│  │                      │ │                    │ │                    │              │
+│  │  ┌────────────────┐ │ │ ┌──────────────┐  │ │ ┌──────────────┐  │              │
+│  │  │  Next.js App   │ │ │ │  FastAPI API  │  │ │ │  PostgreSQL  │  │              │
+│  │  │  Deployment    │ │ │ │  Deployment   │  │ │ │  StatefulSet │  │              │
+│  │  │  replicas: 3   │ │ │ │  replicas: 3  │  │ │ │  replicas: 3 │  │              │
+│  │  │  HPA: 2–10     │ │ │ │  HPA: 2–20   │  │ │ │  (Primary +  │  │              │
+│  │  └────────────────┘ │ │ └──────────────┘  │ │ │   2 Replicas) │  │              │
+│  │                      │ │                    │ │ └──────────────┘  │              │
+│  │  ┌────────────────┐ │ │ ┌──────────────┐  │ │                    │              │
+│  │  │  Static Assets │ │ │ │  Doc Workers │  │ │ ┌──────────────┐  │              │
+│  │  │  (CDN Origin)  │ │ │ │  Deployment   │  │ │ │    Qdrant    │  │              │
+│  │  └────────────────┘ │ │ │  replicas: 5  │  │ │ │  StatefulSet │  │              │
+│  │                      │ │ │  HPA: 2–50   │  │ │ │  replicas: 3 │  │              │
+│  └──────────────────────┘ │ │  (CPU-based)  │  │ │ │  (Sharded)   │  │              │
+│                            │ └──────────────┘  │ │ └──────────────┘  │              │
+│                            │                    │ │                    │              │
+│                            │ ┌──────────────┐  │ │ ┌──────────────┐  │              │
+│                            │ │   RabbitMQ    │  │ │ │    Redis     │  │              │
+│                            │ │  StatefulSet  │  │ │ │   Sentinel   │  │              │
+│                            │ │  replicas: 3  │  │ │ │  replicas: 3 │  │              │
+│                            │ │  (Clustered)  │  │ │ └──────────────┘  │              │
+│                            │ └──────────────┘  │ │                    │              │
+│                            └────────────────────┘ └────────────────────┘              │
+│                                                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐    │
+│  │                      NAMESPACE: monitoring                                  │    │
+│  │                                                                             │    │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │    │
+│  │  │  Prometheus   │  │   Grafana    │  │    Loki      │  │  AlertManager│   │    │
+│  │  │  (Metrics)    │  │ (Dashboards) │  │   (Logs)     │  │  (Alerts)    │   │    │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘   │    │
+│  └─────────────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 2.2 — Horizontal Pod Autoscaling (HPA) Strategy
+
+The key advantage of Kubernetes is **automatic scaling based on real-time demand**. Different services scale on different metrics:
+
+| Service | Scale Metric | Min Pods | Max Pods | Scale-Up Trigger |
+|---------|-------------|----------|----------|-----------------|
+| **Next.js Frontend** | CPU utilization | 2 | 10 | CPU > 70% for 60s |
+| **FastAPI API** | Request rate (RPS) | 2 | 20 | > 100 RPS sustained |
+| **Document Workers** | RabbitMQ queue length | 2 | 50 | Queue depth > 50 messages |
+| **Qdrant** | Memory utilization | 3 | 6 | Memory > 80% |
+
+```yaml
+# Example: HPA for Document Processing Workers
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: doc-worker-hpa
+  namespace: ai
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: doc-worker
+  minReplicas: 2
+  maxReplicas: 50
+  metrics:
+    # Scale based on CPU (document parsing is CPU-intensive)
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+    # Scale based on custom metric: RabbitMQ queue depth
+    - type: External
+      external:
+        metric:
+          name: rabbitmq_queue_messages
+          selector:
+            matchLabels:
+              queue: document_processing
+        target:
+          type: AverageValue
+          averageValue: "10"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30    # Scale up quickly
+      policies:
+        - type: Pods
+          value: 5
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300   # Scale down slowly (avoid thrashing)
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 120
+```
+
+**Why this matters for IntelliDoc:**
+- A user uploads 200 documents at once → RabbitMQ queue depth spikes → K8s scales doc workers from 2 to 20 within 60 seconds → all 200 documents are processed in ~5 minutes instead of 2 hours → workers scale back down to 2 after the queue drains, saving costs.
+
+#### 2.3 — Kubernetes Secret Management
+
+All sensitive credentials (API keys, database passwords, JWT secrets) are stored as Kubernetes Secrets, encrypted at rest via KMS:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: intellidoc-secrets
+  namespace: ai
+type: Opaque
+data:
+  GEMINI_API_KEY: <base64-encoded>
+  DATABASE_URL: <base64-encoded>
+  RABBITMQ_URL: <base64-encoded>
+  QDRANT_API_KEY: <base64-encoded>
+```
+
+In production, these would be managed via **AWS Secrets Manager** or **HashiCorp Vault** with automatic rotation.
+
+---
+
+### Scaling Stage 3: Observability with Prometheus & Grafana
+
+At scale, **you cannot fix what you cannot measure**. The observability stack provides real-time insight into every layer of IntelliDoc.
+
+#### 3.1 — Metrics Collection Architecture
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│                    OBSERVABILITY PIPELINE                          │
+│                                                                   │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐   │
+│  │  FastAPI     │───▶│ Prometheus  │───▶│      Grafana        │   │
+│  │  /metrics    │    │  (Scraper)  │    │   (Dashboards)      │   │
+│  └─────────────┘    └──────┬──────┘    │                     │   │
+│                            │           │  ┌───────────────┐  │   │
+│  ┌─────────────┐          │           │  │ API Latency   │  │   │
+│  │  Next.js    │──────────┤           │  │ Dashboard     │  │   │
+│  │  /metrics   │          │           │  └───────────────┘  │   │
+│  └─────────────┘          │           │                     │   │
+│                            │           │  ┌───────────────┐  │   │
+│  ┌─────────────┐          │           │  │ Queue Monitor │  │   │
+│  │  RabbitMQ   │──────────┤           │  │ Dashboard     │  │   │
+│  │  Exporter   │          │           │  └───────────────┘  │   │
+│  └─────────────┘          │           │                     │   │
+│                            │           │  ┌───────────────┐  │   │
+│  ┌─────────────┐          │           │  │ Infrastructure│  │   │
+│  │  PostgreSQL │──────────┤           │  │ Dashboard     │  │   │
+│  │  Exporter   │          │           │  └───────────────┘  │   │
+│  └─────────────┘          │           │                     │   │
+│                            │           │  ┌───────────────┐  │   │
+│  ┌─────────────┐          │           │  │ Business KPIs │  │   │
+│  │  Redis      │──────────┤           │  │ Dashboard     │  │   │
+│  │  Exporter   │          │           │  └───────────────┘  │   │
+│  └─────────────┘          │           └─────────────────────┘   │
+│                            │                                     │
+│                     ┌──────▼──────┐                              │
+│                     │ AlertManager│── Slack / PagerDuty / Email  │
+│                     └─────────────┘                              │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+#### 3.2 — FastAPI Instrumentation
+
+The AI Service would expose Prometheus metrics via `prometheus-fastapi-instrumentator`:
+
+```python
+# ai_service/main.py — Prometheus integration
+from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_client import Counter, Histogram, Gauge
+
+# Custom business metrics
+DOCUMENTS_PROCESSED = Counter(
+    "intellidoc_documents_processed_total",
+    "Total documents processed",
+    ["status", "file_type"]   # labels: success/failure, pdf/docx/txt
+)
+
+EMBEDDING_DURATION = Histogram(
+    "intellidoc_embedding_duration_seconds",
+    "Time taken to generate embeddings for a document",
+    buckets=[1, 5, 10, 30, 60, 120, 300]
+)
+
+QUEUE_DEPTH = Gauge(
+    "intellidoc_rabbitmq_queue_depth",
+    "Current number of unprocessed documents in the queue"
+)
+
+RAG_RESPONSE_RELEVANCE = Histogram(
+    "intellidoc_rag_relevance_score",
+    "Distribution of RAG response relevance scores (0-1)",
+    buckets=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+)
+
+ACTIVE_CHAT_SESSIONS = Gauge(
+    "intellidoc_active_chat_sessions",
+    "Number of currently active chat sessions"
+)
+
+# Auto-instrument all FastAPI endpoints
+Instrumentator(
+    should_group_status_codes=True,
+    should_ignore_untemplated=True,
+    excluded_handlers=["/health", "/metrics"],
+).instrument(app).expose(app, endpoint="/metrics")
+```
+
+#### 3.3 — Grafana Dashboards
+
+Four primary dashboards would be configured:
+
+**Dashboard 1: API Performance**
+| Panel | Metric | Alert Threshold |
+|-------|--------|----------------|
+| Request Rate | `rate(http_requests_total[5m])` | — |
+| P95 Latency | `histogram_quantile(0.95, http_request_duration_seconds)` | > 2s → Warning |
+| P99 Latency | `histogram_quantile(0.99, http_request_duration_seconds)` | > 5s → Critical |
+| Error Rate | `rate(http_requests_total{status=~"5.."}[5m])` | > 1% → Critical |
+| Chat Streaming Latency | `intellidoc_chat_first_token_seconds` | > 3s → Warning |
+
+**Dashboard 2: Document Processing Pipeline**
+| Panel | Metric | Alert Threshold |
+|-------|--------|----------------|
+| Queue Depth | `intellidoc_rabbitmq_queue_depth` | > 100 → Scale Up |
+| Processing Rate | `rate(intellidoc_documents_processed_total[5m])` | < 1/min → Warning |
+| Avg Embedding Time | `intellidoc_embedding_duration_seconds` | > 120s → Warning |
+| Failed Documents | `intellidoc_documents_processed_total{status="failure"}` | > 5 in 10min → Critical |
+| Worker Utilization | `container_cpu_usage_seconds_total{pod=~"doc-worker.*"}` | > 80% → Scale Up |
+
+**Dashboard 3: Infrastructure Health**
+| Panel | Metric | Alert Threshold |
+|-------|--------|----------------|
+| PostgreSQL Connections | `pg_stat_activity_count` | > 80% of max → Warning |
+| PostgreSQL Query Latency | `pg_stat_statements_mean_time_seconds` | > 500ms → Warning |
+| Redis Memory | `redis_memory_used_bytes` | > 80% of max → Warning |
+| Redis Hit Rate | `redis_keyspace_hits / (hits + misses)` | < 90% → Tune Caching |
+| Qdrant Collection Size | `qdrant_collection_point_count` | — (Monitoring) |
+| Qdrant Search Latency | `qdrant_search_duration_seconds` | > 500ms → Warning |
+
+**Dashboard 4: Business KPIs**
+| Panel | Metric | Description |
+|-------|--------|-------------|
+| Active Users (DAU) | Custom PostgreSQL query | Daily active users |
+| Documents Uploaded/Day | `rate(intellidoc_documents_processed_total[24h])` | Upload velocity |
+| Chat Messages/Day | Custom counter metric | User engagement |
+| RAG Relevance Score | `intellidoc_rag_relevance_score` | AI response quality |
+| Subscription Conversions | Custom PostgreSQL query | Free → Pro upgrade rate |
+
+#### 3.4 — Alerting Rules
+
+```yaml
+# prometheus/alert-rules.yml
+groups:
+  - name: intellidoc-critical
+    rules:
+      # Document processing queue is backing up
+      - alert: DocumentQueueBacklog
+        expr: intellidoc_rabbitmq_queue_depth > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Document processing queue backlog"
+          description: "{{ $value }} documents waiting in queue for >5min. Consider scaling workers."
+
+      # AI Service is down
+      - alert: AIServiceDown
+        expr: up{job="ai-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "AI Service is unreachable"
+          description: "The FastAPI AI service has been down for >1 minute."
+
+      # High error rate on chat endpoint
+      - alert: HighChatErrorRate
+        expr: rate(http_requests_total{handler="/api/v1/chat",status=~"5.."}[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate on /api/v1/chat"
+          description: "Chat endpoint error rate is {{ $value | humanizePercentage }} (>5%) for 3min."
+
+      # Database connection pool exhaustion
+      - alert: DatabaseConnectionsHigh
+        expr: pg_stat_activity_count / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL connections at {{ $value | humanizePercentage }} of max"
+
+      # Vector search is slow
+      - alert: QdrantSearchSlow
+        expr: histogram_quantile(0.95, qdrant_search_duration_seconds) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Qdrant P95 search latency is {{ $value }}s (>500ms)"
+```
+
+---
+
+### Scaling Stage 4: Database & Storage Scaling Strategies
+
+#### 4.1 — PostgreSQL Scaling Path
+
+```
+Stage 1 (Current)          Stage 2                    Stage 3
+┌──────────────┐      ┌──────────────┐         ┌──────────────────┐
+│ Neon Serverless│     │ Dedicated    │         │ Primary + Read   │
+│ (Single Node) │ ──▶ │ RDS/Cloud SQL│ ──────▶ │ Replicas (3x)    │
+│ Auto-suspend   │     │ r6g.large    │         │ + PgBouncer      │
+│ 0.5–2 CU       │     │ 2 vCPU/16GB  │         │ + Partitioning   │
+└──────────────┘      └──────────────┘         └──────────────────┘
+```
+
+- **Read Replicas**: Route all `SELECT` queries (document listing, conversation history, analytics) to read replicas. Write queries (document upload, user creation) go to the primary.
+- **Table Partitioning**: Partition the `Chunk` and `Message` tables by `workspace_id` for faster queries in multi-tenant scenarios.
+- **Archival**: Move documents and conversations older than 1 year to cold storage (S3 + Athena) to keep the primary database lean.
+
+#### 4.2 — Qdrant Vector Database Scaling
+
+```
+Stage 1 (Current)          Stage 2                    Stage 3
+┌──────────────┐      ┌──────────────┐         ┌──────────────────┐
+│ Qdrant Cloud  │     │ Self-hosted   │         │ Qdrant Cluster   │
+│ (Single Node) │ ──▶ │ Qdrant (K8s) │ ──────▶ │ 3 Shards × 2     │
+│ 1GB vectors    │     │ 3 replicas    │         │ Replicas          │
+│                │     │ WAL enabled   │         │ + Quantization    │
+└──────────────┘      └──────────────┘         └──────────────────┘
+```
+
+- **Sharding**: Shard the vector collection by `workspace_id` so that searches are scoped to a single shard, dramatically reducing search latency.
+- **Quantization**: Enable scalar quantization to reduce memory usage by 4x with minimal accuracy loss (< 1% recall drop).
+- **Multi-Tenancy Filter**: Use Qdrant's payload filtering to ensure tenant isolation at the vector level:
+  ```json
+  {
+    "filter": {
+      "must": [{ "key": "workspace_id", "match": { "value": "ws_abc123" } }]
+    }
+  }
+  ```
+
+#### 4.3 — Object Storage (S3) Scaling
+
+- **Lifecycle Policies**: Move documents not accessed in 90 days to S3 Infrequent Access (50% cost reduction). Move to Glacier after 1 year.
+- **CloudFront CDN**: Serve pre-signed download URLs through CloudFront for faster document downloads globally.
+- **Multipart Uploads**: For large documents (> 100MB), implement multipart upload directly from the browser to S3, bypassing the API server entirely.
+
+---
+
+### Scaling Comparison Summary
+
+| Aspect | Current (MVP) | Stage 1 (Optimized) | Stage 2 (Kubernetes) |
+|--------|---------------|--------------------|--------------------|
+| **Users** | 1–500 | 500–5,000 | 5,000–100,000+ |
+| **Documents** | < 10K | 10K–100K | 100K–10M+ |
+| **Monthly Cost** | $0–$50 | $50–$300 | $500–$5,000+ |
+| **Frontend** | Vercel (Free) | Vercel (Pro) | K8s + CDN |
+| **AI Service** | Render (1 inst.) | Render (2–4 inst.) | K8s HPA (2–50 pods) |
+| **Database** | Neon Serverless | Neon Pro | RDS + Read Replicas |
+| **Monitoring** | Vercel Analytics | Basic Prometheus | Full Grafana Stack |
+| **Deploy Time** | ~30s (Vercel) | ~30s (Vercel) | ~2min (Helm) |
+| **Recovery (MTTR)** | Manual restart | Manual restart | Auto-healing (< 30s) |
+| **Scaling Speed** | Instant (Edge) | Manual (Render UI) | Auto (HPA, < 60s) |
+
+> **🎯 Philosophy:** Don't scale before you need to. The current Vercel + Render + Managed Services stack handles the first 500 users with zero operational overhead. Move to Kubernetes only when you need fine-grained autoscaling, self-hosting compliance, or cost optimization at volume.
+
+---
+
 ## 🧪 Development
 
 ### Useful Commands
@@ -562,12 +1043,6 @@ The app uses **Zod** to validate all environment variables at startup. If a requ
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ---
 
