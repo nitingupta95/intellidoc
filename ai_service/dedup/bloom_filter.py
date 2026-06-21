@@ -3,7 +3,6 @@ import logging
 import uuid
 import psycopg2
 from redis import Redis
-from redis.commands.bf.info import BFInfo
 from core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -13,8 +12,7 @@ class BloomFilterDedup:
         self.enabled = settings.BLOOM_ENABLED
         self.redis_client = Redis.from_url(settings.REDIS_URL, decode_responses=False)
         self.db_url = settings.DATABASE_URL
-        self.error_rate = settings.BLOOM_ERROR_RATE
-        self.initial_capacity = settings.BLOOM_INITIAL_CAPACITY
+        # Note: error_rate and initial_capacity are unused for standard Sets, kept for config compatibility
 
     def normalize(self, text: str) -> str:
         """Lowercases and collapses whitespace for consistent hashing."""
@@ -26,24 +24,8 @@ class BloomFilterDedup:
         return hashlib.sha256(normalized.encode('utf-8')).hexdigest()
 
     def _get_filter_key(self, workspace_id: str) -> str:
-        return f"bf:ws:{workspace_id}"
-
-    def _ensure_filter_exists(self, workspace_id: str):
-        """Ensures the Bloom Filter exists in Redis for the workspace."""
-        key = self._get_filter_key(workspace_id)
-        # Check if exists using generic redis EX command
-        if not self.redis_client.exists(key):
-            try:
-                self.redis_client.bf().reserve(
-                    key, 
-                    self.error_rate, 
-                    self.initial_capacity
-                )
-                logger.info(f"Created new Bloom Filter for workspace {workspace_id}")
-            except Exception as e:
-                # If it already exists (race condition), it will raise an error we can ignore
-                if "Item exists" not in str(e):
-                    logger.error(f"Error creating Bloom Filter: {e}")
+        # Changed prefix from bf: to set: to denote it's a standard set
+        return f"set:ws:{workspace_id}"
 
     def verify_in_db(self, workspace_id: str, chunk_hash: str) -> bool:
         """Verifies if the chunk hash actually exists in PostgreSQL."""
@@ -62,15 +44,13 @@ class BloomFilterDedup:
 
     def filter_duplicates(self, chunks: list[dict], workspace_id: str, document_id: str) -> dict:
         """
-        Filters chunks using the Bloom Filter and PostgreSQL verification.
+        Filters chunks using Redis Sets and PostgreSQL verification.
         Returns a dict with "new" chunks to embed and "skipped" count.
         """
         if not self.enabled:
             return {"new": chunks, "skipped": 0}
 
-        self._ensure_filter_exists(workspace_id)
         key = self._get_filter_key(workspace_id)
-        bf = self.redis_client.bf()
         
         new_chunks = []
         duplicate_chunks = []
@@ -83,12 +63,12 @@ class BloomFilterDedup:
 
             chunk_hash = self.hash_chunk(text)
             
-            # 1. Bloom Filter Check
+            # 1. Redis Set Check
             try:
-                # Check if hash is probably in the filter
-                might_exist = bf.exists(key, chunk_hash)
+                # sismember returns 1 if exists, 0 if not
+                might_exist = self.redis_client.sismember(key, chunk_hash)
             except Exception as e:
-                logger.error(f"Bloom Filter exists check failed: {e}")
+                logger.error(f"Redis sismember check failed: {e}")
                 might_exist = False # Default to processing
 
             if might_exist:
@@ -112,20 +92,19 @@ class BloomFilterDedup:
         }
 
     def record_new_hashes(self, chunks: list[dict], workspace_id: str, document_id: str):
-        """Records hashes of successfully embedded chunks to Redis and PostgreSQL."""
+        """Records hashes of successfully embedded chunks to Redis Set and PostgreSQL."""
         if not self.enabled or not chunks:
             return
 
         key = self._get_filter_key(workspace_id)
-        bf = self.redis_client.bf()
         
-        # 1. Add to Redis Bloom Filter
+        # 1. Add to Redis Set
         hashes_to_add = [c["metadata"]["chunk_hash"] for c in chunks if "metadata" in c and "chunk_hash" in c["metadata"]]
         if hashes_to_add:
             try:
-                bf.madd(key, *hashes_to_add)
+                self.redis_client.sadd(key, *hashes_to_add)
             except Exception as e:
-                logger.error(f"Error adding to Bloom Filter: {e}")
+                logger.error(f"Error adding to Redis Set: {e}")
 
         # 2. Record to PostgreSQL
         try:
@@ -147,24 +126,22 @@ class BloomFilterDedup:
             logger.error(f"Error recording hashes to database: {e}")
 
     def get_stats(self, workspace_id: str) -> dict:
-        """Returns stats about the Bloom filter for a given workspace."""
+        """Returns stats about the Deduplicator for a given workspace."""
         key = self._get_filter_key(workspace_id)
         exists = self.redis_client.exists(key)
         stats = {
             "workspace_id": workspace_id,
-            "bloom_filter_exists": bool(exists),
+            "redis_set_exists": bool(exists),
             "total_hashes": 0
         }
         
         if exists:
             try:
-                bf = self.redis_client.bf()
-                info = bf.info(key)
-                stats["items_inserted"] = info.get("insertedNum")
-                stats["capacity"] = info.get("capacity")
-                stats["size_bytes"] = info.get("size")
+                stats["items_inserted"] = self.redis_client.scard(key)
+                stats["capacity"] = "unlimited"
+                stats["size_bytes"] = "unknown (dynamic)"
             except Exception as e:
-                logger.error(f"Error getting Bloom Filter info: {e}")
+                logger.error(f"Error getting Redis Set info: {e}")
 
         try:
             with psycopg2.connect(self.db_url) as conn:
@@ -177,14 +154,12 @@ class BloomFilterDedup:
         return stats
 
     def rebuild_from_db(self, workspace_id: str):
-        """Rebuilds the Redis Bloom filter from PostgreSQL records."""
+        """Rebuilds the Redis Set from PostgreSQL records."""
         key = self._get_filter_key(workspace_id)
         
         # Delete existing
         self.redis_client.delete(key)
-        self._ensure_filter_exists(workspace_id)
         
-        bf = self.redis_client.bf()
         count = 0
         try:
             with psycopg2.connect(self.db_url) as conn:
@@ -194,20 +169,22 @@ class BloomFilterDedup:
                     cur.execute('SELECT "chunkHash" FROM "ChunkHash" WHERE "workspaceId" = %s', (workspace_id,))
                     
                     batch = []
+                    pipeline = self.redis_client.pipeline()
                     for row in cur:
                         batch.append(row[0])
                         if len(batch) >= 1000:
-                            bf.madd(key, *batch)
+                            pipeline.sadd(key, *batch)
+                            pipeline.execute()
                             count += len(batch)
                             batch = []
                     if batch:
-                        bf.madd(key, *batch)
+                        self.redis_client.sadd(key, *batch)
                         count += len(batch)
                         
-            logger.info(f"Rebuilt Bloom Filter for workspace {workspace_id} with {count} items.")
+            logger.info(f"Rebuilt Redis Set for workspace {workspace_id} with {count} items.")
             return {"status": "success", "rebuilt_items": count}
         except Exception as e:
-            logger.error(f"Error rebuilding Bloom filter: {e}")
+            logger.error(f"Error rebuilding Redis Set: {e}")
             return {"status": "error", "message": str(e)}
 
 # Singleton instance

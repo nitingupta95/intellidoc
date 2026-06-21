@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5442/intellidoc"
     
     class Config:
-        env_file = ".env"
+        env_file = (".env", "../.env")
         extra = "ignore"
 
 settings = Settings()
