@@ -18,6 +18,14 @@ class Settings(BaseSettings):
 
     AI_SERVICE_URL: str = "http://localhost:8000"
     
+    # Dedup / Bloom Filter
+    BLOOM_ERROR_RATE: float = 0.01
+    BLOOM_INITIAL_CAPACITY: int = 100000
+    BLOOM_ENABLED: bool = True
+    
+    # PostgreSQL Connection string for direct verification
+    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5442/intellidoc"
+    
     class Config:
         env_file = ".env"
         extra = "ignore"

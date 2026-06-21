@@ -45,6 +45,11 @@ class QdrantVectorStore:
                     field_name="metadata.document_id",
                     field_schema=PayloadSchemaType.KEYWORD,
                 )
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="metadata.chunk_hash",
+                    field_schema=PayloadSchemaType.KEYWORD,
+                )
                 logger.info("Ensured keyword payload indices")
             except Exception as index_err:
                 # If index already exists or another minor error, it's safe to ignore
@@ -70,6 +75,69 @@ class QdrantVectorStore:
             collection_name=self.collection_name,
             points=points
         )
+        
+    def copy_duplicate_vectors(self, duplicate_chunks: list[dict], workspace_id: str) -> list[dict]:
+        """Copies existing vectors from Qdrant and upserts them. Returns any chunks that could not be found."""
+        if not duplicate_chunks:
+            return []
+            
+        # Extract unique hashes we need to find
+        hashes = list({c["metadata"]["chunk_hash"] for c in duplicate_chunks if "chunk_hash" in c.get("metadata", {})})
+        if not hashes:
+            return duplicate_chunks
+            
+        try:
+            # Fetch existing vectors from Qdrant with pagination to ensure we don't miss any hashes
+            records = []
+            next_page = None
+            while True:
+                res, next_page = self.client.scroll(
+                    collection_name=self.collection_name,
+                    scroll_filter=Filter(must=[
+                        FieldCondition(key="metadata.workspace_id", match=MatchAny(any=[workspace_id])),
+                        FieldCondition(key="metadata.chunk_hash", match=MatchAny(any=hashes))
+                    ]),
+                    with_vectors=True,
+                    limit=1000,
+                    offset=next_page
+                )
+                records.extend(res)
+                if not next_page:
+                    break
+            
+            # Map hash to its vector
+            hash_to_vector = {}
+            for record in records:
+                if record.vector:
+                    h = record.payload.get("metadata", {}).get("chunk_hash")
+                    if h and h not in hash_to_vector:
+                        hash_to_vector[h] = record.vector
+                        
+            # Create new points for the new document using the copied vectors
+            points_to_upsert = []
+            missing_chunks = []
+            
+            for chunk in duplicate_chunks:
+                h = chunk.get("metadata", {}).get("chunk_hash")
+                if h in hash_to_vector:
+                    points_to_upsert.append(PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector=hash_to_vector[h],
+                        payload=chunk
+                    ))
+                else:
+                    logger.warning(f"Could not find existing Qdrant vector for hash {h} in collection {self.collection_name}")
+                    missing_chunks.append(chunk)
+                    
+            if points_to_upsert:
+                self.client.upsert(collection_name=self.collection_name, points=points_to_upsert)
+                logger.info(f"Copied {len(points_to_upsert)} duplicate vectors in Qdrant")
+                
+            return missing_chunks
+        except Exception as e:
+            logger.error(f"Error copying duplicate vectors in Qdrant: {e}")
+            # If Qdrant fails, we must fall back to re-embedding all of them to prevent data loss
+            return duplicate_chunks
         
     def search(self, query_vector: list[float], workspace_id: str, knowledge_base_id: str = None, document_ids: list[str] = None, limit: int = 5):
         must_conditions = [

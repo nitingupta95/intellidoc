@@ -153,6 +153,7 @@ model Workspace {
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  chunkHashes ChunkHash[]
 }
 
 model KnowledgeBase {
@@ -264,6 +265,7 @@ model Document {
   
   conversations   Conversation[]
   chunks          Chunk[]
+  chunkHashes     ChunkHash[]
 
   @@index([workspaceId])
 }
@@ -368,4 +370,19 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model ChunkHash {
+  id          String   @id @default(cuid())
+  workspaceId String
+  documentId  String
+  chunkHash   String
+  createdAt   DateTime @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, chunkHash])
+  @@index([chunkHash])
+  @@index([workspaceId])
 }

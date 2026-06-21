@@ -15,6 +15,7 @@ from retrieval.qdrant_client import QdrantVectorStore
 from retrieval.reranker import reranker
 from llm.rag_chain import RAGChain
 from workers.rabbitmq_consumer import consume
+from dedup.bloom_filter import bloom_dedup
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -270,20 +271,47 @@ def process_document_pipeline(file_path: str, document_id: str, workspace_id: st
             })
             return
             
-        # 3. Embed
-        update_document_status(document_id, {"currentStep": "Generating Embeddings", "progress": 70})
-        texts = [c["content"] for c in chunks]
-        embeddings, provider, dim = embedding_svc.embed_documents(
-            texts, 
+        # 2.5 Deduplicate chunks
+        update_document_status(document_id, {"currentStep": "Deduplicating chunks", "progress": 60})
+        dedup_results = bloom_dedup.filter_duplicates(chunks, workspace_id, document_id)
+        new_chunks = dedup_results.get("new", [])
+        duplicate_chunks = dedup_results.get("duplicates", [])
+        skipped_count = dedup_results.get("skipped", 0)
+        logger.info(f"Deduplication: {len(new_chunks)} new chunks to embed, {len(duplicate_chunks)} duplicates found.")
+        
+        # Determine Provider First
+        _, provider, dim = embedding_svc.get_embeddings_and_provider(
             openai_api_key=openai_api_key, 
             gemini_api_key=gemini_api_key
         )
-        
-        # 4. Upsert to Qdrant
-        update_document_status(document_id, {"currentStep": "Saving to Vector Store", "progress": 90})
         vs = get_vector_store(provider=provider, dimension=dim)
-        vs.upsert_chunks(chunks, embeddings)
-        logger.info(f"Upserted {len(chunks)} vectors to Qdrant for {document_id}")
+            
+        # 3. Handle Duplicates: Copy vectors from Qdrant directly
+        if duplicate_chunks:
+            update_document_status(document_id, {"currentStep": "Copying existing vectors", "progress": 65})
+            missing_chunks = vs.copy_duplicate_vectors(duplicate_chunks, workspace_id)
+            if missing_chunks:
+                logger.info(f"Failed to copy {len(missing_chunks)} duplicate vectors (likely model switch). Appending to new chunks.")
+                new_chunks.extend(missing_chunks)
+            
+        # 4. Handle New: Embed and upsert
+        if new_chunks:
+            update_document_status(document_id, {"currentStep": "Generating Embeddings", "progress": 70})
+            texts = [c["content"] for c in new_chunks]
+            embeddings, _, _ = embedding_svc.embed_documents(
+                texts, 
+                openai_api_key=openai_api_key, 
+                gemini_api_key=gemini_api_key
+            )
+            
+            update_document_status(document_id, {"currentStep": "Saving to Vector Store", "progress": 90})
+            vs.upsert_chunks(new_chunks, embeddings)
+            logger.info(f"Upserted {len(new_chunks)} new vectors to Qdrant for {document_id}")
+            
+            # Record successfully embedded hashes
+            bloom_dedup.record_new_hashes(new_chunks, workspace_id, document_id)
+        else:
+            logger.info(f"All chunks for {document_id} were duplicates. Bypassed embedding.")
         
         # 5. Generate Summary and Questions
         update_document_status(document_id, {"currentStep": "Generating Summary", "progress": 95})
@@ -305,6 +333,7 @@ def process_document_pipeline(file_path: str, document_id: str, workspace_id: st
             "currentStep": "Complete", 
             "progress": 100,
             "chunkCount": len(chunks),
+            "chunksSkipped": skipped_count, # Added dedup metrics
             "embeddingModel": f"provider: {provider}, dim: {dim}",
             "summary": summary_data.get("summary"),
             "suggestedQuestions": summary_data.get("suggestedQuestions")
@@ -369,6 +398,26 @@ async def process_document(request: DocumentProcessRequest, bg_tasks: Background
         x_gemini_api_key,
     )
     return {"status": "processing_queued", "document_id": request.document_id}
+
+@app.get("/api/v1/dedup/stats/{workspace_id}")
+async def get_dedup_stats(workspace_id: str):
+    """Returns dedup statistics for a workspace."""
+    try:
+        stats = bloom_dedup.get_stats(workspace_id)
+        return stats
+    except Exception as e:
+        logger.error(f"Error getting dedup stats: {e}")
+        return {"error": str(e)}
+
+@app.post("/api/v1/dedup/rebuild/{workspace_id}")
+async def rebuild_dedup_filter(workspace_id: str):
+    """Rebuilds the Bloom filter for a workspace from the DB."""
+    try:
+        result = bloom_dedup.rebuild_from_db(workspace_id)
+        return result
+    except Exception as e:
+        logger.error(f"Error rebuilding dedup filter: {e}")
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
