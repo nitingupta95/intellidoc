@@ -117,7 +117,7 @@ export function useDocuments() {
           throw new Error(errData.error || "Failed to initialize upload");
         }
 
-        const { presignedUrl, documentId } = await presignRes.json();
+        const { presignedUrl, storageKey } = await presignRes.json();
         setUploadQueue(prev => prev.map((q, idx) => idx === i ? { ...q, progress: 50 } : q));
 
         // 2. Upload file directly to S3 via Presigned URL
@@ -139,7 +139,15 @@ export function useDocuments() {
         const completeRes = await fetch("/api/upload/complete", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ documentId })
+          body: JSON.stringify({
+            storageKey,
+            fileName: file.name,
+            fileType: file.type || "application/octet-stream",
+            fileSize: file.size,
+            workspaceId: activeWorkspaceId,
+            knowledgeBaseId: selectedKb || undefined,
+            folderId: currentFolderId || undefined
+          })
         });
 
         if (!completeRes.ok) {
