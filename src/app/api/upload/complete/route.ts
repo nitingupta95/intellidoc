@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { db } from "@/lib/db";
+import { createDocumentRecord } from "@/actions/documents";
 import { publishDocumentJob } from "@/lib/rabbitmq";
 
 export async function POST(req: Request) {
@@ -11,26 +11,32 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { documentId } = body;
+    const { storageKey, fileName, fileType, fileSize, workspaceId, knowledgeBaseId, folderId } = body;
 
-    if (!documentId) {
-      return NextResponse.json({ error: "Missing documentId" }, { status: 400 });
+    if (!storageKey || !workspaceId) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // Fetch the document to verify ownership and get metadata
-    const document = await db.document.findUnique({
-      where: { id: documentId },
+    // Now that the file is successfully uploaded to S3, we create the database record
+    const dbRecord = await createDocumentRecord({
+      title: fileName.split('.').slice(0, -1).join('.'),
+      filename: storageKey, // We use storageKey as filename to avoid duplicates
+      storageKey: storageKey,
+      fileSize: fileSize,
+      mimeType: fileType,
+      uploadedBy: session.user.id,
+      workspaceId,
+      knowledgeBaseId,
+      folderId,
     });
 
-    if (!document) {
-      return NextResponse.json({ error: "Document not found" }, { status: 404 });
+    if (!dbRecord.success || !dbRecord.data) {
+      return NextResponse.json({ error: "Failed to create database record" }, { status: 500 });
     }
 
-    if (document.uploadedBy !== session.user.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    const document = dbRecord.data;
 
-    // Trigger RabbitMQ Job now that the file is fully uploaded to S3
+    // Trigger RabbitMQ Job
     try {
       const minioPath = `minio://${process.env.S3_BUCKET_NAME || "intellidoc-documents"}/${document.storageKey}`;
       await publishDocumentJob(

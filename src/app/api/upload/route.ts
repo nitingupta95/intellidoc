@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { getUploadPresignedUrl } from "@/lib/storage";
-import { createDocumentRecord } from "@/actions/documents";
 import { auth } from "@/auth";
 
 export async function POST(req: Request) {
@@ -11,7 +10,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { fileName, fileType, fileSize, workspaceId, knowledgeBaseId, folderId } = body;
+    const { fileName, fileType, fileSize, workspaceId } = body;
 
     if (!fileName || !fileType || !fileSize) {
       return NextResponse.json({ error: "Missing file details" }, { status: 400 });
@@ -32,28 +31,10 @@ export async function POST(req: Request) {
     // Create a presigned URL for direct S3 upload
     const presignedUrl = await getUploadPresignedUrl(uniqueFileName, fileType);
 
-    // Save metadata to Postgres via Prisma (Server Action)
-    const dbRecord = await createDocumentRecord({
-      title: fileName.split('.').slice(0, -1).join('.'),
-      filename: uniqueFileName,
-      storageKey: uniqueFileName,
-      fileSize: fileSize,
-      mimeType: fileType,
-      uploadedBy: session.user.id,
-      workspaceId,
-      knowledgeBaseId,
-      folderId,
-    });
-
-    if (!dbRecord.success) {
-      throw new Error("Failed to save to database");
-    }
-
-    // Return the presigned URL and document ID. RabbitMQ job will be triggered later.
+    // Return the presigned URL. Database record will be created in /api/upload/complete
     return NextResponse.json({ 
       success: true, 
       presignedUrl,
-      documentId: dbRecord.data!.id,
       storageKey: uniqueFileName
     });
 
