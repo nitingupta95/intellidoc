@@ -62,3 +62,13 @@ export const getFileUrl = async (key: string): Promise<string> => {
   });
   return getSignedUrl(s3, command, { expiresIn: 3600 });
 };
+
+export const getUploadPresignedUrl = async (key: string, mimeType: string): Promise<string> => {
+  const command = new PutObjectCommand({
+    Bucket: BUCKET,
+    Key: key,
+    ContentType: mimeType
+  });
+  // URL expires in 15 minutes
+  return getSignedUrl(s3, command, { expiresIn: 900 });
+};
