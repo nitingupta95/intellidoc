@@ -22,6 +22,12 @@ export async function POST(req: Request) {
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
+
+    const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
+    if (file.size > MAX_SIZE_BYTES) {
+      return NextResponse.json({ error: "File size exceeds the 20MB limit." }, { status: 400 });
+    }
+
     if (!workspaceId) {
       return NextResponse.json({ error: "No workspaceId provided" }, { status: 400 });
     }

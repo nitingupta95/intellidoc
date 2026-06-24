@@ -327,7 +327,7 @@ async def process_document(request: DocumentProcessRequest, bg_tasks: Background
     # ---------------------------------------------------------------------
     # Validate uploaded PDF size (S3 object size) – prevents huge files.
     # ---------------------------------------------------------------------
-    MAX_SIZE_BYTES = 10 * 1024 * 1024  # 10 MiB limit
+    MAX_SIZE_BYTES = 20 * 1024 * 1024  # 20 MiB limit
     try:
         s3 = boto3.client(
             "s3",

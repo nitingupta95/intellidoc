@@ -71,7 +71,7 @@ export function UploadSection({
           {isUploading ? "Uploading..." : isDragOver ? "Drop files here" : "Click or drag files to upload"}
         </h3>
         <p className="text-sm text-muted-foreground mt-2 max-w-sm">
-          Support for PDF, DOCX, PPTX, TXT, MD, CSV, JSON. Maximum file size 50MB. Multiple files supported.
+          Support for PDF, DOCX, PPTX, TXT, MD, CSV, JSON. Maximum file size 20MB. Multiple files supported.
         </p>
       </div>
 

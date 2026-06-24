@@ -31,18 +31,51 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       name: "Credentials",
       credentials: {
         email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
+        password: { label: "Password", type: "password" },
+        otp: { label: "OTP", type: "text" },
+        isVerification: { label: "isVerification", type: "text" }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          return null;
-        }
+        const email = credentials?.email as string;
+        if (!email) return null;
 
         const user = await db.user.findUnique({
-          where: { email: credentials.email as string }
+          where: { email }
         });
 
-        if (!user || !user.password) {
+        if (!user) return null;
+
+        // OTP Verification Flow
+        if (credentials?.isVerification === "true") {
+          const otp = credentials.otp as string;
+          if (!otp) return null;
+
+          const { getRedisClient } = await import("@/lib/redis/client");
+          const redis = await getRedisClient();
+          const storedOtp = await redis.get(`auth:otp:${email}`);
+
+          if (storedOtp !== otp) {
+            throw new Error("Invalid or expired OTP.");
+          }
+
+          // Mark email as verified
+          await db.user.update({
+            where: { email },
+            data: { emailVerified: new Date() }
+          });
+
+          await redis.del(`auth:otp:${email}`);
+
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            image: user.image,
+          };
+        }
+
+        // Standard Login Flow
+        if (!credentials?.password || !user.password) {
           return null;
         }
 
@@ -53,6 +86,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (!isValid) {
           return null;
+        }
+
+        if (!user.emailVerified) {
+          throw new Error("Please verify your email address before logging in.");
         }
 
         return {

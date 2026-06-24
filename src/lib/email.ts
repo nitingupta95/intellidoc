@@ -219,5 +219,61 @@ export const emailService = {
       console.error('Error sending contact form email:', error);
       throw new Error('Failed to send contact form email');
     }
+  },
+
+  sendVerificationOTP: async (email: string, otp: string): Promise<void> => {
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || '"IntelliDoc AI" <noreply@intellidoc.ai>',
+      to: email,
+      subject: 'Verify your email address - IntelliDoc AI',
+      text: `Your email verification code is: ${otp}. It will expire in 10 minutes.`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Verify your email address</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #fafafa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+          <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#fafafa">
+            <tr>
+              <td align="center" style="padding: 40px 0;">
+                <table width="100%" max-width="600" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #ffffff; border: 1px solid #eaeaea; border-radius: 8px; margin: 0 auto; text-align: left;">
+                  <tr>
+                    <td style="padding: 40px;">
+                      <h1 style="color: #111827; font-size: 24px; font-weight: 600; margin: 0 0 16px 0; padding: 0;">Verify your email</h1>
+                      
+                      <p style="color: #4b5563; font-size: 16px; line-height: 24px; margin: 0 0 24px 0;">
+                        Please use the following 6-digit code to verify your email address. This code will expire in 10 minutes.
+                      </p>
+                      
+                      <div style="background-color: #f3f4f6; border-radius: 6px; padding: 24px; text-align: center; margin-bottom: 24px;">
+                        <span style="font-size: 32px; font-weight: 700; letter-spacing: 4px; color: #1f2937;">${otp}</span>
+                      </div>
+                      
+                      <p style="color: #6b7280; font-size: 14px; line-height: 20px; margin: 0 0 24px 0;">
+                        If you didn't request this, you can safely ignore this email.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `,
+    };
+
+    try {
+      if (process.env.NODE_ENV !== 'test') {
+        await transporter.sendMail(mailOptions);
+        console.log(`Verification OTP email sent successfully to ${email}`);
+      }
+    } catch (error) {
+      console.error('Error sending verification OTP email:', error);
+      throw new Error('Failed to send verification OTP email');
+    }
   }
 };
