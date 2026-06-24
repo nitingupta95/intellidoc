@@ -94,23 +94,63 @@ export function useDocuments() {
     setIsUploading(true);
 
     for (let i = 0; i < files.length; i++) {
-      setUploadQueue(prev => prev.map((q, idx) => idx === i ? { ...q, status: 'uploading', progress: 30 } : q));
+      setUploadQueue(prev => prev.map((q, idx) => idx === i ? { ...q, status: 'uploading', progress: 20 } : q));
       try {
-        const formData = new FormData();
-        formData.append("file", files[i]);
-        formData.append("workspaceId", activeWorkspaceId);
-        if (selectedKb) formData.append("knowledgeBaseId", selectedKb);
-        if (currentFolderId) formData.append("folderId", currentFolderId);
+        const file = files[i];
 
-        setUploadQueue(prev => prev.map((q, idx) => idx === i ? { ...q, progress: 60 } : q));
+        // 1. Get Presigned URL
+        const presignRes = await fetch("/api/upload", { 
+          method: "POST", 
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: file.name,
+            fileType: file.type || "application/octet-stream",
+            fileSize: file.size,
+            workspaceId: activeWorkspaceId,
+            knowledgeBaseId: selectedKb || undefined,
+            folderId: currentFolderId || undefined
+          })
+        });
 
-        const res = await fetch("/api/upload", { method: "POST", body: formData });
-        if (!res.ok) throw new Error("Upload failed");
+        if (!presignRes.ok) {
+          const errData = await presignRes.json();
+          throw new Error(errData.error || "Failed to initialize upload");
+        }
+
+        const { presignedUrl, documentId } = await presignRes.json();
+        setUploadQueue(prev => prev.map((q, idx) => idx === i ? { ...q, progress: 50 } : q));
+
+        // 2. Upload file directly to S3 via Presigned URL
+        const uploadRes = await fetch(presignedUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": file.type || "application/octet-stream"
+          },
+          body: file
+        });
+
+        if (!uploadRes.ok) {
+          throw new Error("Failed to upload to storage provider");
+        }
+
+        setUploadQueue(prev => prev.map((q, idx) => idx === i ? { ...q, progress: 80 } : q));
+
+        // 3. Complete the upload and trigger processing
+        const completeRes = await fetch("/api/upload/complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ documentId })
+        });
+
+        if (!completeRes.ok) {
+          throw new Error("Failed to complete upload process");
+        }
 
         setUploadQueue(prev => prev.map((q, idx) => idx === i ? { ...q, status: 'done', progress: 100 } : q));
-      } catch {
+      } catch (error: any) {
+        console.error(error);
         setUploadQueue(prev => prev.map((q, idx) => idx === i ? { ...q, status: 'error', progress: 0 } : q));
-        toast.error(`Failed to upload ${files[i].name}`);
+        toast.error(`Failed to upload ${files[i].name}: ${error.message || "Unknown error"}`);
       }
     }
 
