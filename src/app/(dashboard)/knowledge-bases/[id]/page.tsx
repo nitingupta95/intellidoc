@@ -7,6 +7,7 @@ import { useKbDetails } from "@/hooks/use-kb-details";
 import { KbDocumentsTable } from "@/components/knowledge-bases/kb-documents-table";
 import { KbDocumentsCards } from "@/components/knowledge-bases/kb-documents-cards";
 import { AddExistingDialog } from "@/components/knowledge-bases/add-existing-dialog";
+import { Input } from "@/components/ui/input";
 
 export default function KnowledgeBaseDetailPage() {
   const router = useRouter();
@@ -38,7 +39,7 @@ export default function KnowledgeBaseDetailPage() {
     if (lower.includes("plain")) return "TXT";
     if (lower.includes("markdown")) return "MD";
     if (lower.includes("json")) return "JSON";
-    
+
     const parts = mime.split("/");
     const ext = parts[1]?.toUpperCase() || "FILE";
     if (ext.length > 10) return ext.substring(0, 10) + "...";
@@ -65,18 +66,102 @@ export default function KnowledgeBaseDetailPage() {
   }
 
   return (
-    <div className="h-full flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex items-center gap-4 shrink-0">
-        <Button variant="ghost" size="icon" onClick={() => router.push('/knowledge-bases')} className="rounded-full">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-3xl font-heading font-bold tracking-tight">{kb.name}</h1>
-          <p className="text-muted-foreground mt-1">{kb.description || "No description provided."}</p>
+    <div className="h-full flex flex-col space-y-10">
+      <div className="glass-panel rounded-3xl border border-border/50 p-8">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+
+          <div className="flex items-start gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full mt-1"
+              onClick={() => router.push("/knowledge-bases")}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+
+            <div>
+              <h1 className="text-4xl font-heading font-bold">
+                {kb.name}
+              </h1>
+
+              <p className="text-muted-foreground mt-2 max-w-xl">
+                {kb.description || "No description provided."}
+              </p>
+
+              <div className="flex flex-wrap gap-6 mt-6">
+
+                <div>
+                  <p className="text-2xl font-bold">
+                    {documents.length}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Documents
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-2xl font-bold text-green-500">
+                    {
+                      documents.filter(
+                        d => d.status === "INDEXED"
+                      ).length
+                    }
+                  </p>
+
+                  <p className="text-sm text-muted-foreground">
+                    AI Ready
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-2xl font-bold">
+                    {(
+                      documents.reduce(
+                        (a, b) => a + (b.fileSize || 0),
+                        0
+                      ) /
+                      1024 /
+                      1024
+                    ).toFixed(2)}
+                    MB
+                  </p>
+
+                  <p className="text-sm text-muted-foreground">
+                    Storage
+                  </p>
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+
+            <Button
+              onClick={() =>
+                router.push(`/chat?knowledgeBaseId=${kb.id}`)
+              }
+            >
+              <MessageSquare className="mr-2 h-4 w-4" />
+              Chat KB
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => setIsAddExistingOpen(true)}
+            >
+              Add Existing
+            </Button>
+
+          </div>
+
         </div>
       </div>
+     
 
-      <div 
+      {/* <div 
         onClick={() => fileInputRef.current?.click()}
         className="glass border-dashed border-2 border-border/50 rounded-2xl p-10 flex flex-col items-center justify-center text-center shrink-0 hover:bg-background/40 transition-colors cursor-pointer group"
       >
@@ -96,33 +181,14 @@ export default function KnowledgeBaseDetailPage() {
         <p className="text-sm text-muted-foreground mt-2 max-w-sm">
           Support for PDF, DOCX, PPTX, TXT, MD, CSV, JSON. Maximum file size 50MB.
         </p>
-      </div>
+      </div> */}
 
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin pb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-heading font-semibold">Documents in this collection</h2>
-          <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
-              className="rounded-full text-sm h-9 shadow-sm shadow-primary/5"
-              onClick={() => setIsAddExistingOpen(true)}
-            >
-              Add Existing
-            </Button>
-            <Button 
-              variant="outline" 
-              className="rounded-full text-sm h-9 shadow-sm shadow-primary/5"
-              onClick={() => router.push(`/chat?knowledgeBaseId=${kb.id}`)}
-            >
-              <MessageSquare className="w-4 h-4 mr-2" />
-              Chat with KB
-            </Button>
-          </div>
-        </div>
-        
+         
+
         {documents.length === 0 ? (
           <div className="glass-panel p-8 text-center text-muted-foreground border border-border/50 rounded-2xl">
-            No documents uploaded to this knowledge base yet. Upload a file above to get started.
+            No documents uploaded to this knowledge base yet. Upload a file in document section and click on add existing button to add documents to this knowledge base.
           </div>
         ) : (
           <>
