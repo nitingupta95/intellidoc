@@ -56,9 +56,9 @@ export function ProfileSettings({
             </div>
           </div>
           <div className="space-y-2">
-            <h3 className="font-medium">Profile Picture</h3>
-            <p className="text-sm text-muted-foreground">JPG, GIF or PNG. Max size of 800K.</p>
-            <div className="flex gap-2">
+            <h3 className="font-medium">Profile Picture of {firstName + " " + lastName}</h3>
+            {/* <p className="text-sm text-muted-foreground">JPG, GIF or PNG.</p> */}
+            {/* <div className="flex gap-2">
               <input 
                 type="file" 
                 ref={fileInputRef} 
@@ -72,7 +72,7 @@ export function ProfileSettings({
               <Button size="sm" variant="ghost" className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={onImageRemove} disabled={isImageUploading || !profileImage}>
                 Remove
               </Button>
-            </div>
+            </div> */}
           </div>
         </div>
 
