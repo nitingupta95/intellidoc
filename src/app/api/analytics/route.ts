@@ -141,6 +141,90 @@ export async function GET(req: Request) {
       });
     }
 
+    // ── RAGAS Quality Metrics ────────────────────────────────────────────────
+    // Fetch all evaluated assistant messages (those with at least one RAGAS score)
+    const evaluatedMessages = await db.message.findMany({
+      where: {
+        role: 'assistant',
+        conversation: { workspaceId },
+        faithfulness: { not: null },
+      },
+      select: {
+        faithfulness: true,
+        answerRelevancy: true,
+        contextPrecision: true,
+        contextRecall: true,
+        createdAt: true,
+      },
+    });
+
+    // Helper: average over non-null values
+    const avg = (arr: (number | null)[]) => {
+      const valid = arr.filter((v): v is number => v !== null && v >= 0);
+      return valid.length > 0 ? parseFloat((valid.reduce((a, b) => a + b, 0) / valid.length).toFixed(4)) : null;
+    };
+
+    const ragasAvg = {
+      faithfulness:     avg(evaluatedMessages.map(m => m.faithfulness)),
+      answerRelevancy:  avg(evaluatedMessages.map(m => m.answerRelevancy)),
+      contextPrecision: avg(evaluatedMessages.map(m => m.contextPrecision)),
+      contextRecall:    avg(evaluatedMessages.map(m => m.contextRecall)),
+      evaluatedCount:   evaluatedMessages.length,
+      totalAssistantMessages: await db.message.count({
+        where: { role: 'assistant', conversation: { workspaceId } }
+      }),
+    };
+
+    // Daily RAGAS trend — last 7 days, one data point per day
+    const ragasTrend: {
+      name: string;
+      faithfulness: number | null;
+      answerRelevancy: number | null;
+      contextPrecision: number | null;
+      contextRecall: number | null;
+    }[] = [];
+
+    for (let i = 6; i >= 0; i--) {
+      const dayStart = new Date();
+      dayStart.setDate(dayStart.getDate() - i);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      const dayMsgs = evaluatedMessages.filter(
+        m => m.createdAt >= dayStart && m.createdAt <= dayEnd
+      );
+
+      ragasTrend.push({
+        name: days[dayStart.getDay()],
+        faithfulness:     avg(dayMsgs.map(m => m.faithfulness)),
+        answerRelevancy:  avg(dayMsgs.map(m => m.answerRelevancy)),
+        contextPrecision: avg(dayMsgs.map(m => m.contextPrecision)),
+        contextRecall:    avg(dayMsgs.map(m => m.contextRecall)),
+      });
+    }
+
+    // Score health distribution — for each metric bucket into good/fair/poor
+    const bucketScore = (val: number | null) => {
+      if (val === null) return null;
+      if (val >= 0.7) return 'good';
+      if (val >= 0.4) return 'fair';
+      return 'poor';
+    };
+
+    const scoreDistribution = {
+      faithfulness:     { good: 0, fair: 0, poor: 0 },
+      answerRelevancy:  { good: 0, fair: 0, poor: 0 },
+      contextPrecision: { good: 0, fair: 0, poor: 0 },
+      contextRecall:    { good: 0, fair: 0, poor: 0 },
+    };
+    for (const msg of evaluatedMessages) {
+      for (const metric of ['faithfulness', 'answerRelevancy', 'contextPrecision', 'contextRecall'] as const) {
+        const bucket = bucketScore(msg[metric]);
+        if (bucket) scoreDistribution[metric][bucket]++;
+      }
+    }
+
     return NextResponse.json({
       metrics: {
         totalDocuments,
@@ -149,7 +233,12 @@ export async function GET(req: Request) {
         activeUsers: activeUsersCount
       },
       queryData,
-      storageData
+      storageData,
+      ragas: {
+        averages: ragasAvg,
+        trend: ragasTrend,
+        distribution: scoreDistribution,
+      },
     });
 
   } catch (error) {

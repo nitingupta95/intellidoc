@@ -14,6 +14,7 @@ from embeddings.embedding_service import EmbeddingService
 from retrieval.qdrant_client import QdrantVectorStore
 from retrieval.reranker import reranker
 from llm.rag_chain import RAGChain
+from evaluation.ragas_evaluator import evaluator as ragas_evaluator
 from workers.rabbitmq_consumer import consume
 
 # Setup logging
@@ -119,7 +120,9 @@ async def chat_endpoint(request: ChatRequest, x_openai_api_key: Optional[str] = 
             retrieved_docs.append(text)
             citations.append({
                 "score": res.score,
-                "text_snippet": text[:100] + "...",
+                # Full text included so Next.js can forward to RAGAS evaluator
+                "text_snippet": text[:150] + "..." if len(text) > 150 else text,
+                "full_text": text,
                 "metadata": payload.get("metadata", {})
             })
             
@@ -369,6 +372,74 @@ async def process_document(request: DocumentProcessRequest, bg_tasks: Background
         x_gemini_api_key,
     )
     return {"status": "processing_queued", "document_id": request.document_id}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RAGAS Evaluation Endpoint
+# ─────────────────────────────────────────────────────────────────────────────
+
+class EvaluateRequest(BaseModel):
+    question: str
+    answer: str
+    context_chunks: List[str]
+
+
+class EvaluateResponse(BaseModel):
+    faithfulness: float
+    answer_relevancy: float
+    context_precision: float
+    context_recall: float
+    overall: float
+    metadata_health: Optional[Dict] = None
+    duplicate_health: Optional[Dict] = None
+
+
+@app.post("/api/v1/evaluate", response_model=EvaluateResponse)
+async def evaluate_endpoint(
+    request: EvaluateRequest,
+    x_openai_api_key: Optional[str] = Header(None),
+    x_gemini_api_key: Optional[str] = Header(None),
+):
+    """
+    RAGAS evaluation endpoint.
+    Computes Faithfulness, Answer Relevancy, Context Precision, and Context Recall
+    for a given question / answer / retrieved-context triple.
+
+    Also runs supplementary structural checks:
+    - Metadata validator (detects missing document_id / page_number)
+    - Duplicate chunk detector (detects redundant top-k slots)
+    """
+    logger.info(f"RAGAS evaluation request: question='{request.question[:60]}...'")
+
+    try:
+        # Core 4 RAGAS metrics (each makes 1 LLM call via gpt-4o-mini / gemini-flash)
+        scores = ragas_evaluator.evaluate(
+            question=request.question,
+            answer=request.answer,
+            context_chunks=request.context_chunks,
+            openai_api_key=x_openai_api_key,
+            gemini_api_key=x_gemini_api_key,
+        )
+
+        # Supplementary structural checks (no LLM calls — pure text analysis)
+        dup_health = ragas_evaluator.detect_duplicate_chunks(request.context_chunks)
+
+        return EvaluateResponse(
+            faithfulness=scores["faithfulness"],
+            answer_relevancy=scores["answer_relevancy"],
+            context_precision=scores["context_precision"],
+            context_recall=scores["context_recall"],
+            overall=scores["overall"],
+            metadata_health=None,   # metadata check runs on the Next.js side (has structured chunk dicts)
+            duplicate_health=dup_health,
+        )
+    except Exception as e:
+        logger.error(f"RAGAS evaluation error: {e}", exc_info=True)
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Evaluation failed", "detail": str(e)}
+        )
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))

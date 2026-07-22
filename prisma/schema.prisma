@@ -300,6 +300,12 @@ model Message {
   hasWarning        Boolean  @default(false)
   createdAt         DateTime @default(now())
 
+  // RAGAS evaluation scores (null for unevaluated messages, -1 for evaluation errors)
+  faithfulness      Float?   // [0,1]: all claims in answer are supported by context
+  answerRelevancy   Float?   // [0,1]: answer addresses the question
+  contextPrecision  Float?   // [0,1]: relevant chunks ranked higher (average precision)
+  contextRecall     Float?   // [0,1]: context covers all info needed to answer
+
   conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   citationsRefs     Citation[]
   feedbacks         MessageFeedback[]

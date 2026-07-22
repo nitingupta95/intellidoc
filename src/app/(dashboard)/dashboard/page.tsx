@@ -1,7 +1,7 @@
-import { 
-  FileText, 
-  MessageSquare, 
-  Zap, 
+import {
+  FileText,
+  MessageSquare,
+  Zap,
   Clock,
   Sparkles
 } from "lucide-react";
@@ -47,56 +47,56 @@ export default async function DashboardPage() {
 
       {/* STAT CARDS ROW */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard 
-          title="Total Documents" 
-          value={totalDocuments.toString()} 
-          change="+0%" 
-          icon={<FileText size={18} className="text-blue-500 dark:text-blue-400" />} 
+        <StatCard
+          title="Total Documents"
+          value={totalDocuments.toString()}
+          change="+0%"
+          icon={<FileText size={18} className="text-blue-500 dark:text-blue-400" />}
           iconBg="bg-blue-500/10"
         />
-        <StatCard 
-          title="AI Queries" 
-          value={aiQueries.toString()} 
-          change="+0%" 
-          icon={<MessageSquare size={18} className="text-purple-500 dark:text-purple-400" />} 
+        <StatCard
+          title="AI Queries"
+          value={aiQueries.toString()}
+          change="+0%"
+          icon={<MessageSquare size={18} className="text-purple-500 dark:text-purple-400" />}
           iconBg="bg-purple-500/10"
         />
-        <StatCard 
-          title="Avg Confidence" 
-          value={avgConfidence > 0 ? `${avgConfidence.toFixed(1)}%` : "N/A"} 
-          change="+0%" 
-          icon={<Zap size={18} className="text-amber-500 dark:text-amber-400" />} 
+        <StatCard
+          title="Avg Confidence"
+          value={avgConfidence > 0 ? `${avgConfidence.toFixed(1)}%` : "N/A"}
+          change="+0%"
+          icon={<Zap size={18} className="text-amber-500 dark:text-amber-400" />}
           iconBg="bg-amber-500/10"
         />
-        <StatCard 
-          title="Time Saved" 
-          value={`${timeSavedHours} hrs`} 
-          change="+0%" 
-          icon={<Clock size={18} className="text-teal-500 dark:text-teal-400" />} 
+        <StatCard
+          title="Time Saved"
+          value={`${timeSavedHours} hrs`}
+          change="+0%"
+          icon={<Clock size={18} className="text-teal-500 dark:text-teal-400" />}
           iconBg="bg-teal-500/10"
         />
       </div>
 
       {/* LOWER SECTION */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4">
-        
+
         {/* LEFT — Recent Knowledge Activity */}
         <div className="glass-panel p-5 border border-border/50">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-heading font-semibold text-foreground">Recent Knowledge Activity</h2>
             <Link href="/documents" className="text-sm text-muted-foreground hover:text-foreground transition-colors">View All</Link>
           </div>
-          
+
           <div className="flex flex-col">
             {activity.length > 0 ? (
               activity.map((act, idx) => (
-                <ActivityRow 
+                <ActivityRow
                   key={`${act.type}-${act.id}`}
                   icon={
-                    act.type === "document" 
+                    act.type === "document"
                       ? <FileText size={16} className="text-foreground/70" />
                       : <MessageSquare size={16} className="text-foreground/70" />
-                  } 
+                  }
                   title={act.title}
                   meta={`${formatDistanceToNow(act.date, { addSuffix: true })} • By ${session?.user?.name || "You"}`}
                   isLast={idx === activity.length - 1}
@@ -117,23 +117,21 @@ export default async function DashboardPage() {
 
           <div className="flex flex-col gap-3">
             {insights.map((insight) => (
-              <div 
+              <div
                 key={insight.id}
-                className={`border rounded-lg p-4 ${
-                  insight.color === "purple" 
-                    ? "bg-purple-500/5 border-purple-500/10 dark:bg-purple-500/10 dark:border-purple-500/20" 
+                className={`border rounded-lg p-4 ${insight.color === "purple"
+                    ? "bg-purple-500/5 border-purple-500/10 dark:bg-purple-500/10 dark:border-purple-500/20"
                     : "bg-emerald-500/5 border-emerald-500/10 dark:bg-emerald-500/10 dark:border-emerald-500/20"
-                }`}
+                  }`}
               >
-                <h3 className={`text-sm font-medium mb-1 ${
-                  insight.color === "purple" ? "text-purple-600 dark:text-purple-400" : "text-emerald-600 dark:text-emerald-400"
-                }`}>
+                <h3 className={`text-sm font-medium mb-1 ${insight.color === "purple" ? "text-purple-600 dark:text-purple-400" : "text-emerald-600 dark:text-emerald-400"
+                  }`}>
                   {insight.title}
                 </h3>
                 <p className="text-xs text-muted-foreground line-clamp-2">
                   {insight.body}
                 </p>
-                <Link 
+                <Link
                   href={insight.href}
                   className="w-full flex items-center justify-center bg-foreground/5 hover:bg-foreground/10 text-sm text-foreground rounded-md py-2 mt-3 transition-colors"
                 >
