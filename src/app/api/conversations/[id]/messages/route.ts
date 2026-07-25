@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { API_BASE_URL } from '@/lib/api';
@@ -289,16 +289,24 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
           console.error("Failed to save assistant message", dbErr);
         }
 
-        // Fire RAGAS evaluation in the background (non-blocking, does NOT delay stream close)
+        // Fire RAGAS evaluation in the background (non-blocking, keeps Vercel lambda alive)
         if (savedMessageId && fullAssistantContent.trim()) {
-          runRAGASEvaluation(
-            savedMessageId,
-            message,
-            fullAssistantContent.trim(),
-            contextChunksForEval,
-            userOpenAIKey,
-            userGeminiKey,
-          ).catch(err => console.error('[RAGAS] Unhandled evaluation error:', err));
+          const evalMessageId = savedMessageId;
+          const evalAssistantContent = fullAssistantContent.trim();
+          after(async () => {
+            try {
+              await runRAGASEvaluation(
+                evalMessageId,
+                message,
+                evalAssistantContent,
+                contextChunksForEval,
+                userOpenAIKey,
+                userGeminiKey,
+              );
+            } catch (err) {
+              console.error('[RAGAS] Unhandled evaluation error:', err);
+            }
+          });
         }
 
         controller.close();
