@@ -3,6 +3,8 @@ import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { API_BASE_URL } from '@/lib/api';
 
+export const maxDuration = 60; // Allow enough time for background RAGAS evaluation
+
 export async function GET(req: Request, props: { params: Promise<{ id: string }> }) {
   try {
     const params = await props.params;
@@ -234,16 +236,20 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         // Collect full text of retrieved context chunks for RAGAS
         const contextChunksForEval: string[] = [];
 
+        let buffer = "";
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value);
+          buffer += decoder.decode(value, { stream: true });
           controller.enqueue(value);
 
-          // Parse SSE lines to accumulate text and citations
-          const lines = chunk.split('\n');
-          for (const line of lines) {
+          let newlineIndex;
+          while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+            const line = buffer.slice(0, newlineIndex);
+            buffer = buffer.slice(newlineIndex + 1);
+
             if (line.startsWith('data: ')) {
               const dataStr = line.substring(6).replace(/\r$/, '');
               if (dataStr === '[DONE]') continue;
