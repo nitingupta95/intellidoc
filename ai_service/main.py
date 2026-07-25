@@ -431,7 +431,12 @@ async def process_document_pipeline(file_path: str, document_id: str, workspace_
             if len(parts) == 2:
                 object_key = parts[1]
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+        # Extract original file extension
+        ext = os.path.splitext(object_key)[1].lower()
+        if not ext:
+            ext = ".pdf" # Fallback
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp_file:
             s3.download_file(settings.S3_BUCKET, object_key, tmp_file.name)
             local_path = tmp_file.name
             
