@@ -186,14 +186,6 @@ async def chat_endpoint(
                 yield "data: [DONE]\n\n"
             return StreamingResponse(cached_generator(), media_type="text/event-stream")
         
-        # 2. Context Cache (Conversation-Scoped) Check
-        # If the user is asking a follow up in the same session, we could reuse context.
-        # But we don't have chat_id in request. Let's use a hash of the history as a proxy or just skip for now.
-        # Wait, the prompt says "cache retrieved chunks per chat_id". 
-        # I'll update ChatRequest to optionally include chat_id.
-        chat_id = request.history[-1].get("chat_id", "default") if request.history else "default"
-        ctx_cache_key = f"chat_ctx:{chat_id}"
-        
         async def get_or_create_embedding(query, emb_cache_key):
             cached_emb = await redis_client.get(emb_cache_key)
             if cached_emb:
@@ -231,52 +223,40 @@ async def chat_endpoint(
         # 4. Retrieve from Vector DB (Qdrant) with larger limit for re-ranking
         t_search_start = time.perf_counter()
         
-        # Check context cache first
-        cached_ctx = await redis_client.get(ctx_cache_key)
-        if cached_ctx and request.history and len(request.history) > 0:
-            # Re-use context for follow-ups
-            logger.info("Context cache hit! Reusing retrieved chunks.")
-            search_results = []
-            retrieved_docs = json.loads(cached_ctx)
-            citations = [] # Or load citations from cache too
-        else:
-            vs = await get_vector_store(provider=provider, dimension=dim)
-            search_results = await vs.search(
-                query_vector=query_vector, 
-                limit=15, 
-                workspace_id=request.workspace_id,
-                knowledge_base_id=request.knowledge_base_id,
-                document_ids=request.document_ids,
-                query_text=request.query,
-                team_id=request.team_id,
-                department=request.department,
-                project=request.project
-            )
+        vs = await get_vector_store(provider=provider, dimension=dim)
+        search_results = await vs.search(
+            query_vector=query_vector, 
+            limit=15, 
+            workspace_id=request.workspace_id,
+            knowledge_base_id=request.knowledge_base_id,
+            document_ids=request.document_ids,
+            query_text=request.query,
+            team_id=request.team_id,
+            department=request.department,
+            project=request.project
+        )
+        
+        # 4.5 Re-rank with Cross-Encoder
+        if search_results:
+            logger.info(f"Re-ranking {len(search_results)} candidates...")
+            search_results = reranker.rerank(request.query, search_results, top_k=5)
+        
+        # Extract text from payloads
+        retrieved_docs = []
+        citations = []
+        for res in search_results:
+            payload = res.payload or {}
+            text = payload.get("content", "")
+            retrieved_docs.append(text)
+            citations.append({
+                "score": res.score,
+                "text_snippet": text[:150] + "..." if len(text) > 150 else text,
+                "full_text": text,
+                "metadata": payload.get("metadata", {})
+            })
             
-            # 4.5 Re-rank with Cross-Encoder
-            if search_results:
-                logger.info(f"Re-ranking {len(search_results)} candidates...")
-                search_results = reranker.rerank(request.query, search_results, top_k=5)
-            
-            # Extract text from payloads
-            retrieved_docs = []
-            citations = []
-            for res in search_results:
-                payload = res.payload or {}
-                text = payload.get("content", "")
-                retrieved_docs.append(text)
-                citations.append({
-                    "score": res.score,
-                    "text_snippet": text[:150] + "..." if len(text) > 150 else text,
-                    "full_text": text,
-                    "metadata": payload.get("metadata", {})
-                })
-                
-            if not retrieved_docs:
-                retrieved_docs = ["No relevant context found in documents."]
-                
-            # Save to context cache for 10 minutes
-            await redis_client.setex(ctx_cache_key, 600, json.dumps(retrieved_docs))
+        if not retrieved_docs:
+            retrieved_docs = ["No relevant context found in documents."]
             
         t_search = time.perf_counter() - t_search_start
 
