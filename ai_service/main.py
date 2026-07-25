@@ -187,10 +187,12 @@ async def chat_endpoint(
                 if "citations" in cache_data:
                     yield f"data: {{\"event\": \"citations\", \"data\": {json.dumps(cache_data['citations'])} }}\n\n"
                 
-                # Yield the content exactly as standard streaming would (as a string)
-                yield f"data: {cache_data.get('content', '')}\n\n"
+                # Yield the content safely using json.dumps to handle newlines
+                yield f"data: {json.dumps(cache_data.get('content', ''))}\n\n"
                 yield "data: [DONE]\n\n"
             return StreamingResponse(cached_generator(), media_type="text/event-stream")
+        
+        chat_id = request.history[-1].get("chat_id", "default") if request.history else "default"
         
         async def get_or_create_embedding(query, emb_cache_key):
             cached_emb = await redis_client.get(emb_cache_key)
