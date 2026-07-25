@@ -182,7 +182,13 @@ async def chat_endpoint(
         if cached_response:
             logger.info("Full response cache hit!")
             async def cached_generator():
-                yield f"data: {cached_response}\n\n"
+                cache_data = json.loads(cached_response)
+                # Yield citations event first
+                if "citations" in cache_data:
+                    yield f"data: {{\"event\": \"citations\", \"data\": {json.dumps(cache_data['citations'])} }}\n\n"
+                
+                # Yield the content exactly as standard streaming would (as a string)
+                yield f"data: {cache_data.get('content', '')}\n\n"
                 yield "data: [DONE]\n\n"
             return StreamingResponse(cached_generator(), media_type="text/event-stream")
         
@@ -304,7 +310,11 @@ async def chat_endpoint(
             
             # Cache the full response
             if full_answer:
-                cache_payload = json.dumps({"content": full_answer, "cached": True})
+                cache_payload = json.dumps({
+                    "content": full_answer, 
+                    "cached": True,
+                    "citations": citations
+                })
                 await redis_client.setex(full_resp_key, 43200, cache_payload) # 12 hours TTL
                 
                 # Phase 8: Move persistence, analytics, quota to Background Tasks
