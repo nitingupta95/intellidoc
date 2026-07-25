@@ -1,7 +1,8 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 class SemanticChunker:
-    def __init__(self, chunk_size=1000, chunk_overlap=200):
+    # Phase 3: Reduced from 1000/200 down to 400/50 for faster retrieval and smaller prompts.
+    def __init__(self, chunk_size=400, chunk_overlap=50):
         # We start with recursive character text splitter which behaves semi-semantically.
         # Can be upgraded to SemanticChunker from langchain_experimental if OpenAI embeddings are used.
         self.text_splitter = RecursiveCharacterTextSplitter(

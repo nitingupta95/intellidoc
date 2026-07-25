@@ -9,7 +9,6 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
-.ai_service/venv
 
 # testing
 /coverage
@@ -44,3 +43,8 @@ next-env.d.ts
 ai_service/venv/
 venv/
 .venv/
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class

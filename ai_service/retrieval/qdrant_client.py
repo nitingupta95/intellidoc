@@ -1,6 +1,6 @@
 import logging
 import uuid
-from qdrant_client import QdrantClient
+from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchAny
 from core.config import settings
 
@@ -8,20 +8,21 @@ logger = logging.getLogger(__name__)
 
 class QdrantVectorStore:
     def __init__(self, collection_name="documents", dimension=1536):
-        self.client = QdrantClient(
+        self.client = AsyncQdrantClient(
             url=settings.QDRANT_URL,
             port=443 if settings.QDRANT_URL.startswith("https") else 6333,
             api_key=settings.QDRANT_API_KEY if settings.QDRANT_API_KEY else None
         )
         self.collection_name = collection_name
         self.dimension = dimension
-        self._ensure_collection()
+        # NOTE: _ensure_collection is now async, so we must call it explicitly after init if needed, 
+        # but for Phase 7 we will move initialization to app startup.
 
-    def _ensure_collection(self):
+    async def _ensure_collection(self):
         try:
-            collections = self.client.get_collections().collections
+            collections = (await self.client.get_collections()).collections
             if not any(c.name == self.collection_name for c in collections):
-                self.client.create_collection(
+                await self.client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config=VectorParams(size=self.dimension, distance=Distance.COSINE),
                 )
@@ -30,17 +31,17 @@ class QdrantVectorStore:
             # Always ensure the payload index exists for workspace_id filtering
             try:
                 from qdrant_client.models import PayloadSchemaType
-                self.client.create_payload_index(
+                await self.client.create_payload_index(
                     collection_name=self.collection_name,
                     field_name="metadata.workspace_id",
                     field_schema=PayloadSchemaType.KEYWORD,
                 )
-                self.client.create_payload_index(
+                await self.client.create_payload_index(
                     collection_name=self.collection_name,
                     field_name="metadata.knowledge_base_id",
                     field_schema=PayloadSchemaType.KEYWORD,
                 )
-                self.client.create_payload_index(
+                await self.client.create_payload_index(
                     collection_name=self.collection_name,
                     field_name="metadata.document_id",
                     field_schema=PayloadSchemaType.KEYWORD,
@@ -53,7 +54,7 @@ class QdrantVectorStore:
         except Exception as e:
             logger.error(f"Error ensuring Qdrant collection: {e}")
 
-    def upsert_chunks(self, chunks: list[dict], embeddings: list[list[float]]):
+    async def upsert_chunks(self, chunks: list[dict], embeddings: list[list[float]]):
         if not chunks:
             logger.warning("No chunks provided to upsert. Skipping.")
             return
@@ -66,12 +67,23 @@ class QdrantVectorStore:
                 payload=chunk
             ))
         
-        self.client.upsert(
+        await self.client.upsert(
             collection_name=self.collection_name,
             points=points
         )
         
-    def search(self, query_vector: list[float], workspace_id: str, knowledge_base_id: str = None, document_ids: list[str] = None, limit: int = 5):
+    async def search(
+        self, 
+        query_vector: list[float], 
+        workspace_id: str, 
+        knowledge_base_id: str = None, 
+        document_ids: list[str] = None, 
+        limit: int = 5,
+        query_text: str = None,
+        team_id: str = None,
+        department: str = None,
+        project: str = None
+    ):
         must_conditions = [
             FieldCondition(
                 key="metadata.workspace_id",
@@ -80,7 +92,6 @@ class QdrantVectorStore:
         ]
         
         if document_ids is not None:
-            # Only search within the provided document_ids (this is the most precise filter)
             must_conditions.append(
                 FieldCondition(
                     key="metadata.document_id",
@@ -95,19 +106,51 @@ class QdrantVectorStore:
                 )
             )
 
+        # Extended metadata filters
+        if team_id:
+            must_conditions.append(FieldCondition(key="metadata.team_id", match=MatchAny(any=[team_id])))
+        if department:
+            must_conditions.append(FieldCondition(key="metadata.department", match=MatchAny(any=[department])))
+        if project:
+            must_conditions.append(FieldCondition(key="metadata.project", match=MatchAny(any=[project])))
+
         query_filter = Filter(must=must_conditions)
             
         if hasattr(self.client, "query_points"):
-            return self.client.query_points(
+            # If query_text is provided, we can simulate hybrid search (BM25/Sparse + Dense)
+            # NOTE: Requires setting up a sparse vector index in Qdrant and a sparse embedding model (e.g. SPLADE/fastembed).
+            # This is a skeleton of the hybrid query using prefetch.
+            prefetch = None
+            # if query_text and SPARSE_MODEL_AVAILABLE:
+            #     sparse_vector = compute_sparse_vector(query_text)
+            #     prefetch = [
+            #         qmodels.Prefetch(
+            #             query=sparse_vector,
+            #             using="sparse",
+            #             filter=query_filter,
+            #             limit=limit * 2
+            #         ),
+            #         qmodels.Prefetch(
+            #             query=query_vector,
+            #             using="default",
+            #             filter=query_filter,
+            #             limit=limit * 2
+            #         )
+            #     ]
+            
+            result = await self.client.query_points(
                 collection_name=self.collection_name,
                 query=query_vector,
+                prefetch=prefetch,
                 query_filter=query_filter,
                 limit=limit
-            ).points
+            )
+            return result.points
         else:
-            return self.client.search(
+            result = await self.client.search(
                 collection_name=self.collection_name,
                 query_vector=query_vector,
                 query_filter=query_filter,
                 limit=limit
             )
+            return result

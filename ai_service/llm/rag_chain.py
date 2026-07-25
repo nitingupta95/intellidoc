@@ -91,3 +91,25 @@ class RAGChain:
             print("Failed to parse JSON for summary:", e)
             return {"summary": "Unable to generate summary.", "suggestedQuestions": []}
 
+    async def summarize_history(self, history: list[dict], openai_api_key: str = None, gemini_api_key: str = None) -> str:
+        """
+        Compresses a long chat history into a single summary.
+        """
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", "You are an expert conversation summarizer. Provide a concise summary of the following chat history. The summary should capture the user's main goals, key questions asked, and the assistant's core answers. Do not output anything other than the summary."),
+            ("human", "Chat History:\n{history_str}")
+        ])
+        
+        history_str = "\n".join([f"{msg.get('role')}: {msg.get('content')}" for msg in history])
+        
+        llm = None
+        if openai_api_key:
+            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+        elif gemini_api_key:
+            llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, google_api_key=gemini_api_key)
+        else:
+            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=settings.OPENAI_API_KEY)
+            
+        chain = prompt | llm | StrOutputParser()
+        return await chain.ainvoke({"history_str": history_str})
+

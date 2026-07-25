@@ -21,26 +21,18 @@ async def process_message(message: IncomingMessage):
             knowledge_base_id = data.get("knowledgeBaseId")
             user_id = data.get("userId")
             
-            # To actually process it in FastAPI, we'll POST to the local endpoint
-            
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{settings.AI_SERVICE_URL}/api/v1/documents/process",
-                    json={
-                        "document_id": document_id,
-                        "file_path": minio_path,
-                        "workspace_id": workspace_id,
-                        "knowledge_base_id": knowledge_base_id,
-                        "uploaded_by": user_id,
-                        "metadata": data
-                    },
-                    timeout=30.0
-                )
-                
-            if response.status_code == 200:
-                logger.info(f"Successfully queued internal processing for {document_id}")
-            else:
-                logger.error(f"Failed to trigger internal processing: {response.text}")
+            # Process it inline using the imported pipeline
+            from main import process_document_pipeline
+            await process_document_pipeline(
+                file_path=minio_path,
+                document_id=document_id,
+                workspace_id=workspace_id,
+                uploaded_by=user_id,
+                knowledge_base_id=knowledge_base_id,
+                metadata=data,
+                openai_api_key=settings.OPENAI_API_KEY
+            )
+            logger.info(f"Successfully processed {document_id}")
                 
         except Exception as e:
             logger.error(f"Error processing message: {e}")
@@ -51,6 +43,7 @@ async def consume():
         channel = await connection.channel()
         
         queue = await channel.declare_queue("document_processing", durable=True)
+        await channel.set_qos(prefetch_count=2)
         
         logger.info("RabbitMQ Consumer started. Waiting for messages...")
         await queue.consume(process_message)
