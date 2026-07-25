@@ -51,8 +51,7 @@ async function runRAGASEvaluation(
       return;
     }
 
-    const aiServiceBase = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-    const evalUrl = `${aiServiceBase}/api/v1/evaluate`;
+    const evalUrl = `${API_BASE_URL}/evaluate`;
 
     const resp = await fetch(evalUrl, {
       method: 'POST',
