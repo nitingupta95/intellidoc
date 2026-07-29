@@ -83,6 +83,10 @@ export function useChat() {
     await sendMessage(userMsg, activeWorkspaceId, currentKbId || undefined, docId);
   };
 
+  const handleTranscript = (text: string) => {
+    setInput((prev) => prev ? `${prev} ${text}` : text);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -140,6 +144,7 @@ export function useChat() {
     activeConversation,
     currentKbId,
     handleSend,
+    handleTranscript,
     handleKeyDown,
     handleShare,
   };

@@ -10,7 +10,6 @@ class QdrantVectorStore:
     def __init__(self, collection_name="documents", dimension=1536):
         self.client = AsyncQdrantClient(
             url=settings.QDRANT_URL,
-            port=443 if settings.QDRANT_URL.startswith("https") else 6333,
             api_key=settings.QDRANT_API_KEY if settings.QDRANT_API_KEY else None
         )
         self.collection_name = collection_name

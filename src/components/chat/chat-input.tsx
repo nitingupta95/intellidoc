@@ -2,6 +2,7 @@
 
 import { Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { VoiceInputButton } from "./VoiceInputButton";
 
 interface ChatInputProps {
   input: string;
@@ -10,6 +11,7 @@ interface ChatInputProps {
   handleKeyDown: (e: React.KeyboardEvent) => void;
   isGenerating: boolean;
   hasKey: boolean | null;
+  onTranscript?: (text: string) => void;
 }
 
 export function ChatInput({
@@ -19,6 +21,7 @@ export function ChatInput({
   handleKeyDown,
   isGenerating,
   hasKey,
+  onTranscript,
 }: ChatInputProps) {
   return (
     <div className="absolute bottom-0 left-0 right-0 p-4 pointer-events-none bg-gradient-to-t from-background via-background/90 to-transparent pt-12 pb-[calc(env(safe-area-inset-bottom)+16px)] z-40">
@@ -34,6 +37,13 @@ export function ChatInput({
             rows={1}
           />
           
+          {onTranscript && (
+            <VoiceInputButton 
+              onTranscript={onTranscript} 
+              disabled={hasKey === false || isGenerating} 
+            />
+          )}
+
           <Button 
             onClick={handleSend} 
             disabled={!input.trim() || isGenerating || hasKey === false}

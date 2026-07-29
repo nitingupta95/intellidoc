@@ -39,6 +39,7 @@ function ChatContent() {
     activeConversation,
     currentKbId,
     handleSend,
+    handleTranscript,
     handleKeyDown,
     handleShare,
   } = useChat();
@@ -159,6 +160,7 @@ function ChatContent() {
           input={input}
           setInput={setInput}
           handleSend={handleSend}
+          onTranscript={handleTranscript}
           handleKeyDown={handleKeyDown}
           isGenerating={isGenerating}
           hasKey={hasKey}

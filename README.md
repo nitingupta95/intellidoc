@@ -528,6 +528,29 @@ Ready for Chat & Search
 
 ---
 
+## 🎙️ Voice Input (Whisper) Pipeline
+
+```
+User taps mic (Frontend)
+    │
+MediaRecorder captures audio (Mode A: record-then-send)
+    │
+POST /api/voice/transcribe (multipart)
+    │
+Redis cache check (SHA-256 of audio) ──hit──> return cached transcript
+    │ miss
+Whisper API (whisper-1 via Next.js server)
+    │
+Transcript returned to frontend (editable, not auto-sent)
+    │
+User reviews/edits → presses send
+    │
+Existing RAG chat pipeline (unchanged)
+```
+
+
+---
+
 ## 🏗️ System Design & Future Scaling
 
 IntelliDoc is architected with **progressive scalability** in mind — start simple, scale deliberately. The system is designed so that every component can be independently scaled or replaced without rewriting application code.
