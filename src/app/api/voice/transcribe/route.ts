@@ -42,24 +42,30 @@ export async function POST(req: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Rate Limiting
-    const redis = await getRedisClient();
+    let count = 0;
+    let cachedTranscript = null;
+    const hash = crypto.createHash('sha256').update(buffer).digest('hex');
+    const cacheKey = `voice_transcript:${hash}`;
     const minuteWindow = Math.floor(Date.now() / 60000);
     const rlKey = `voice_rl:${session.user.id}:${minuteWindow}`;
-    
-    const count = await redis.incr(rlKey);
-    if (count === 1) {
-      await redis.expire(rlKey, 60);
+
+    try {
+      // Rate Limiting & Caching
+      const redis = await getRedisClient();
+      
+      count = await redis.incr(rlKey);
+      if (count === 1) {
+        await redis.expire(rlKey, 60);
+      }
+
+      cachedTranscript = await redis.get(cacheKey);
+    } catch (redisError) {
+      console.warn('Redis connection failed, skipping rate limiting and caching:', redisError);
     }
 
     if (count > RATE_LIMIT_RPM) {
       return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
     }
-
-    // Caching
-    const hash = crypto.createHash('sha256').update(buffer).digest('hex');
-    const cacheKey = `voice_transcript:${hash}`;
-    const cachedTranscript = await redis.get(cacheKey);
 
     if (cachedTranscript) {
       const latencyMs = Math.round(performance.now() - t0);
@@ -108,7 +114,12 @@ export async function POST(req: Request) {
 
     // Cache the result for 1 hour
     if (transcript && transcript.trim().length > 0) {
-      await redis.setex(cacheKey, 3600, transcript);
+      try {
+        const redis = await getRedisClient();
+        await redis.setex(cacheKey, 3600, transcript);
+      } catch (redisError) {
+        console.warn('Redis connection failed, could not save cache:', redisError);
+      }
     }
 
     const latencyMs = Math.round(performance.now() - t0);
