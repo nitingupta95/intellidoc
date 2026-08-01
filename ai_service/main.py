@@ -22,6 +22,13 @@ from llm.rag_chain import RAGChain
 from evaluation.ragas_evaluator import evaluator as ragas_evaluator
 from workers.rabbitmq_consumer import consume
 
+import uuid
+from crag import evaluator as crag_evaluator
+from crag import refiner as crag_refiner
+from crag import web_search as crag_web_search
+from crag import pending_store as crag_pending_store
+from crag.models import EvalVerdict, PendingCRAGContext
+
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -83,6 +90,10 @@ class ChatRequest(BaseModel):
     team_id: Optional[str] = None
     department: Optional[str] = None
     project: Optional[str] = None
+
+class ResolveRequest(BaseModel):
+    pending_id: str
+    consent: bool
 
 class DocumentProcessRequest(BaseModel):
     document_id: str
@@ -152,6 +163,78 @@ async def compress_history_task(chat_id: str, history: list[dict], redis_client,
         await redis_client.setex(f"chat_summary:{chat_id}", 3600*24, summary)
         logger.info(f"Compressed history for chat {chat_id} into summary.")
 
+async def _stream_final_answer(
+    question: str,
+    context_docs: List[str],
+    citations: List[dict],
+    history: List[dict],
+    chat_id: str,
+    workspace_id: str,
+    redis_client,
+    bg_tasks: BackgroundTasks,
+    x_openai_api_key: Optional[str],
+    x_gemini_api_key: Optional[str],
+    full_resp_key: Optional[str] = None,
+    t0: float = None,
+    t_embed: float = 0,
+    t_search: float = 0,
+    conservative: bool = False
+):
+    t_llm_start = time.perf_counter()
+    first_token_time = None
+    
+    citations_event = f"data: {{\"event\": \"citations\", \"data\": {json.dumps(citations)}}}\n\n"
+    yield citations_event
+    
+    full_answer = ""
+    async for chunk in rag_chain.stream_answer(
+        question, 
+        context_docs, 
+        history, 
+        openai_api_key=x_openai_api_key,
+        gemini_api_key=x_gemini_api_key,
+        conservative=conservative
+    ):
+        if first_token_time is None:
+            first_token_time = time.perf_counter() - t_llm_start
+        
+        chunk_str = json.dumps(chunk)
+        yield f"data: {chunk_str}\n\n"
+        
+        if isinstance(chunk, str):
+            full_answer += chunk
+        elif isinstance(chunk, dict) and "content" in chunk:
+            full_answer += chunk["content"]
+        
+    t_llm_total = time.perf_counter() - t_llm_start
+    t_total = time.perf_counter() - (t0 or time.perf_counter())
+    
+    metrics = {
+        "embedding_time": round(t_embed, 3),
+        "qdrant_search_time": round(t_search, 3),
+        "llm_first_token_time": round(first_token_time, 3) if first_token_time else None,
+        "llm_total_time": round(t_llm_total, 3),
+        "total_time": round(t_total, 3)
+    }
+    logger.info(json.dumps({"event": "rag_query_metrics", "metrics": metrics}))
+    
+    if full_answer:
+        if full_resp_key:
+            cache_payload = json.dumps({
+                "content": full_answer, 
+                "cached": True,
+                "citations": citations
+            })
+            await redis_client.setex(full_resp_key, 43200, cache_payload)
+            
+        bg_tasks.add_task(save_chat_to_db, chat_id, question, full_answer, workspace_id)
+        bg_tasks.add_task(log_analytics_event, "chat_query", metrics)
+        
+        if history:
+            bg_tasks.add_task(compress_history_task, chat_id, history, redis_client, x_openai_api_key, x_gemini_api_key)
+            
+    yield "data: [DONE]\n\n"
+
 @app.post("/api/v1/chat")
 async def chat_endpoint(
     request: ChatRequest, 
@@ -180,6 +263,7 @@ async def chat_endpoint(
         
         cached_response = await redis_client.get(full_resp_key)
         if cached_response:
+            logger.error(f"Full response cache hit for key: {full_resp_key}")
             logger.info("Full response cache hit!")
             async def cached_generator():
                 cache_data = json.loads(cached_response)
@@ -268,70 +352,47 @@ async def chat_endpoint(
             
         t_search = time.perf_counter() - t_search_start
 
-        # 5. Stream LLM Response via LangChain
-        async def response_generator():
-            t_llm_start = time.perf_counter()
-            first_token_time = None
+        # CRAG Phase: Evaluate Documents
+        eval_result = await crag_evaluator.evaluate_documents(
+            request.query, citations, x_openai_api_key, x_gemini_api_key
+        )
+        
+        if eval_result.verdict == EvalVerdict.CORRECT:
+            # Refine docs and stream
+            refined_context = await crag_refiner.refine(
+                request.query, "CORRECT", eval_result.good_docs, 
+                openai_api_key=x_openai_api_key, gemini_api_key=x_gemini_api_key
+            )
+            context_to_use = [refined_context] if refined_context else retrieved_docs
+            final_citations = eval_result.good_docs if eval_result.good_docs else citations
             
-            # Yield citations first as a metadata event
-            citations_event = f"data: {{\"event\": \"citations\", \"data\": {json.dumps(citations)}}}\n\n"
-            yield citations_event
+            return StreamingResponse(_stream_final_answer(
+                request.query, context_to_use, final_citations, request.history, chat_id,
+                request.workspace_id, redis_client, bg_tasks, x_openai_api_key, x_gemini_api_key,
+                full_resp_key, t0, t_embed, t_search
+            ), media_type="text/event-stream")
             
-            full_answer = ""
-            async for chunk in rag_chain.stream_answer(
-                request.query, 
-                retrieved_docs, 
-                request.history, 
-                openai_api_key=x_openai_api_key,
-                gemini_api_key=x_gemini_api_key
-            ):
-                if first_token_time is None:
-                    first_token_time = time.perf_counter() - t_llm_start
-                
-                # Format as Server-Sent Events (SSE) safely using json.dumps
-                chunk_str = json.dumps(chunk)
-                yield f"data: {chunk_str}\n\n"
-                
-                # If chunk is a string, accumulate it for caching
-                if isinstance(chunk, str):
-                    full_answer += chunk
-                elif isinstance(chunk, dict) and "content" in chunk:
-                    full_answer += chunk["content"]
-                
-            t_llm_total = time.perf_counter() - t_llm_start
-            t_total = time.perf_counter() - t0
+        else:
+            # AMBIGUOUS or INCORRECT: save pending state and ask for confirmation
+            pending_id = str(uuid.uuid4())
+            ctx = PendingCRAGContext(
+                pending_id=pending_id,
+                query=request.query,
+                verdict=eval_result.verdict,
+                good_docs=eval_result.good_docs,
+                workspace_id=request.workspace_id,
+                knowledge_base_id=request.knowledge_base_id,
+                document_ids=request.document_ids,
+                history=request.history or [],
+                created_at=time.time()
+            )
+            await crag_pending_store.save_pending_context(redis_client, ctx)
             
-            metrics = {
-                "embedding_time": round(t_embed, 3),
-                "qdrant_search_time": round(t_search, 3),
-                "llm_first_token_time": round(first_token_time, 3) if first_token_time else None,
-                "llm_total_time": round(t_llm_total, 3),
-                "total_time": round(t_total, 3)
-            }
-            logger.info(json.dumps({"event": "rag_query_metrics", "metrics": metrics}))
-            
-            # Cache the full response
-            if full_answer:
-                cache_payload = json.dumps({
-                    "content": full_answer, 
-                    "cached": True,
-                    "citations": citations
-                })
-                await redis_client.setex(full_resp_key, 43200, cache_payload) # 12 hours TTL
+            async def needs_confirmation_generator():
+                yield f"data: {{\"event\": \"needs_confirmation\", \"data\": {{\"pending_id\": \"{pending_id}\", \"verdict\": \"{eval_result.verdict.value}\", \"reason\": \"{eval_result.reason}\", \"good_docs_count\": {len(eval_result.good_docs)}}}}}\n\n"
+                yield "data: [DONE]\n\n"
                 
-                # Phase 8: Move persistence, analytics, quota to Background Tasks
-                bg_tasks.add_task(save_chat_to_db, chat_id, request.query, full_answer, request.workspace_id)
-                bg_tasks.add_task(log_analytics_event, "chat_query", metrics)
-                
-                # Phase 4: History compression task
-                if request.history:
-                    bg_tasks.add_task(compress_history_task, chat_id, request.history, redis_client, x_openai_api_key, x_gemini_api_key)
-                
-            # Metrics have already been calculated and logged above
-            
-            yield "data: [DONE]\n\n"
-
-        return StreamingResponse(response_generator(), media_type="text/event-stream")
+            return StreamingResponse(needs_confirmation_generator(), media_type="text/event-stream")
     except Exception as e:
         logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
         # Return a 500 but WITH the error string so we can see it in Vercel logs!
@@ -346,6 +407,72 @@ async def chat_endpoint(
         except:
             pass
         return JSONResponse(status_code=500, content={"error": "Internal Server Error", "detail": str(e), "type": str(type(e)), "debug": debug_info})
+
+@app.post("/api/v1/chat/resolve")
+async def resolve_chat_endpoint(
+    request: ResolveRequest, 
+    bg_tasks: BackgroundTasks,
+    x_openai_api_key: Optional[str] = Header(None),
+    x_gemini_api_key: Optional[str] = Header(None),
+    user: dict = Depends(authenticate)
+):
+    from fastapi.responses import JSONResponse
+    redis_client = app.state.redis
+    ctx = await crag_pending_store.load_pending_context(redis_client, request.pending_id)
+    
+    if ctx is None:
+        return JSONResponse(
+            status_code=410, 
+            content={"error": "This confirmation has expired or was already used. Please ask your question again."}
+        )
+        
+    chat_id = ctx.history[-1].get("chat_id", "default") if ctx.history else "default"
+    
+    if request.consent:
+        rewritten = await crag_web_search.rewrite_query(ctx.query, x_openai_api_key, x_gemini_api_key)
+        web_docs = await crag_web_search.web_search(rewritten)
+        refined_context = await crag_refiner.refine(
+            ctx.query, ctx.verdict, ctx.good_docs, web_docs,
+            openai_api_key=x_openai_api_key, gemini_api_key=x_gemini_api_key
+        )
+        citations_for_stream = ctx.good_docs + [
+            {
+                "score": None,
+                "text_snippet": w["page_content"][:150] + "..." if len(w["page_content"]) > 150 else w["page_content"],
+                "full_text": w["page_content"],
+                "metadata": w["metadata"]
+            } for w in web_docs
+        ]
+        if refined_context:
+            context_to_use = [refined_context]
+        else:
+            context_to_use = [w["page_content"] for w in web_docs]
+        return StreamingResponse(_stream_final_answer(
+            ctx.query, context_to_use, citations_for_stream, ctx.history, chat_id,
+            ctx.workspace_id, redis_client, bg_tasks, x_openai_api_key, x_gemini_api_key
+        ), media_type="text/event-stream")
+        
+    else:
+        # Consent is False
+        refined_context = await crag_refiner.refine(
+            ctx.query, "CORRECT", ctx.good_docs, 
+            openai_api_key=x_openai_api_key, gemini_api_key=x_gemini_api_key
+        )
+        citations_for_stream = ctx.good_docs
+        
+        if not refined_context:
+            async def canned_generator():
+                msg = "I don't have enough relevant information in your documents to answer this confidently, and you chose not to search the web. Try rephrasing your question or uploading a relevant document."
+                yield f"data: {{\"event\": \"citations\", \"data\": {json.dumps(citations_for_stream)}}}\n\n"
+                yield f"data: {json.dumps(msg)}\n\n"
+                yield "data: [DONE]\n\n"
+            return StreamingResponse(canned_generator(), media_type="text/event-stream")
+            
+        return StreamingResponse(_stream_final_answer(
+            ctx.query, [refined_context], citations_for_stream, ctx.history, chat_id,
+            ctx.workspace_id, redis_client, bg_tasks, x_openai_api_key, x_gemini_api_key,
+            conservative=True
+        ), media_type="text/event-stream")
 
 class RetrieveRequest(BaseModel):
     query: str

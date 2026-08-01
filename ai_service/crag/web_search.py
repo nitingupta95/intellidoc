@@ -1,0 +1,91 @@
+import logging
+from typing import List, Dict, Any
+
+from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_community.tools.tavily_search import TavilySearchResults
+
+from core.config import settings
+from .models import WebQuery
+
+logger = logging.getLogger(__name__)
+
+rewrite_prompt = ChatPromptTemplate.from_messages([
+    ("system", "Rewrite the user question into a web search query composed of keywords. Rules: Keep it short (6-14 words). If the question implies recency (e.g. recent/latest/last week/last month), add a constraint like a year. Do NOT answer the question. Return JSON with a single key: query"),
+    ("human", "{question}")
+])
+
+def _get_rewrite_chain(openai_api_key: str = None, gemini_api_key: str = None):
+    if openai_api_key:
+        llm = ChatOpenAI(
+            model="gpt-4o-mini", 
+            temperature=0,
+            openai_api_key=openai_api_key
+        )
+    elif gemini_api_key:
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-1.5-flash",
+            temperature=0,
+            google_api_key=gemini_api_key
+        )
+    else:
+        # Fallback
+        llm = ChatOpenAI(
+            model="gpt-4o-mini", 
+            temperature=0,
+            openai_api_key=settings.OPENAI_API_KEY
+        )
+    return rewrite_prompt | llm.with_structured_output(WebQuery)
+
+async def rewrite_query(question: str, openai_api_key: str = None, gemini_api_key: str = None) -> str:
+    """
+    Rewrites the user question into a search query.
+    """
+    chain = _get_rewrite_chain(openai_api_key, gemini_api_key)
+    try:
+        res = await chain.ainvoke({"question": question})
+        return res.query
+    except Exception as e:
+        logger.warning(f"Query rewrite failed: {e}. Falling back to original question.")
+        return question
+
+async def web_search(query: str) -> List[Dict[str, Any]]:
+    """
+    Invokes Tavily with the rewritten query and returns formatted docs.
+    """
+    if not settings.TAVILY_API_KEY:
+        logger.warning("TAVILY_API_KEY is not set. Skipping web search.")
+        return []
+
+    try:
+        search = TavilySearchResults(
+            max_results=5,
+            tavily_api_key=settings.TAVILY_API_KEY
+        )
+        
+        # Tavily search is synchronous, so we should run it in an executor in a real async environment.
+        # But we can use the ainvoke method if provided by langchain wrapper
+        if hasattr(search, "ainvoke"):
+            raw_results = await search.ainvoke({"query": query})
+        else:
+            raw_results = search.invoke({"query": query})
+
+        docs = []
+        for res in raw_results:
+            title = res.get("title", "Unknown Title")
+            url = res.get("url", "Unknown URL")
+            content = res.get("content", "")
+            
+            page_content = f"TITLE: {title}\nURL: {url}\nCONTENT:\n{content}"
+            docs.append({
+                "page_content": page_content,
+                "metadata": {
+                    "url": url,
+                    "title": title
+                }
+            })
+        return docs
+    except Exception as e:
+        logger.warning(f"Tavily search failed: {e}")
+        return []

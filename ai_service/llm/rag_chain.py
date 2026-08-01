@@ -8,12 +8,18 @@ from core.config import settings
 class RAGChain:
     def __init__(self):
         self.prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are IntelliDoc AI, an expert document intelligence assistant. Answer the user's question based strictly on the following context. If you don't know the answer based on the context, say so. Always cite your sources. MUST format your response in rich Markdown, using newlines, bold text, and bullet points to make it highly readable and well-structured.\n\nContext:\n{context}"),
+            ("system", "You are IntelliDoc AI, an expert document intelligence assistant. Answer the user's question based strictly on the following context. The context may contain live web search results or internal documents; you MUST use this provided context to answer questions about recent events or real-time data instead of mentioning your knowledge cutoff date. If you don't know the answer based on the context, say so. Always cite your sources. MUST format your response in rich Markdown, using newlines, bold text, and bullet points to make it highly readable and well-structured.\n\nContext:\n{context}"),
+            MessagesPlaceholder(variable_name="history"),
+            ("human", "{question}")
+        ])
+        
+        self.conservative_prompt = ChatPromptTemplate.from_messages([
+            ("system", "You are IntelliDoc AI, an expert document intelligence assistant. The user has explicitly chosen to restrict your knowledge to the provided documents ONLY. Be extremely conservative. If the provided context does not fully answer the question, state exactly what is missing and what you CAN answer based on the context. Answer strictly based on the following context. Always cite your sources. MUST format your response in rich Markdown.\n\nContext:\n{context}"),
             MessagesPlaceholder(variable_name="history"),
             ("human", "{question}")
         ])
 
-    def _get_chain(self, openai_api_key: str = None, gemini_api_key: str = None):
+    def _get_chain(self, openai_api_key: str = None, gemini_api_key: str = None, conservative: bool = False):
         if openai_api_key:
             llm = ChatOpenAI(
                 model="gpt-4o", 
@@ -35,9 +41,10 @@ class RAGChain:
                 openai_api_key=key
             )
             
-        return self.prompt | llm | StrOutputParser()
+        active_prompt = self.conservative_prompt if conservative else self.prompt
+        return active_prompt | llm | StrOutputParser()
 
-    async def stream_answer(self, question: str, retrieved_docs: list[str], history: list[dict] = None, openai_api_key: str = None, gemini_api_key: str = None):
+    async def stream_answer(self, question: str, retrieved_docs: list[str], history: list[dict] = None, openai_api_key: str = None, gemini_api_key: str = None, conservative: bool = False):
         """
         Streams the response back.
         """
@@ -52,7 +59,7 @@ class RAGChain:
                 elif msg.get("role") == "assistant":
                     lc_history.append(AIMessage(content=msg.get("content", "")))
 
-        chain = self._get_chain(openai_api_key, gemini_api_key)
+        chain = self._get_chain(openai_api_key, gemini_api_key, conservative)
         async for chunk in chain.astream({"context": context_str, "history": lc_history, "question": question}):
             yield chunk
 

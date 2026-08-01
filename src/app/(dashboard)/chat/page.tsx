@@ -152,6 +152,7 @@ function ChatContent() {
             docTitle={docTitle}
             docDetails={docDetails}
             setInput={setInput}
+            activeConversationId={activeConversationId}
           />
         </div>
 

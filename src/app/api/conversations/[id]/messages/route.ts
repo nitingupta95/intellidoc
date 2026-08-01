@@ -255,14 +255,20 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
               if (dataStr === '[DONE]') continue;
               try {
                 const json = JSON.parse(dataStr);
-                if (json && typeof json === 'object' && json.event === 'citations') {
-                  citationsData = json.data;
-                  // Extract full_text from each citation for RAGAS evaluation
-                  if (Array.isArray(json.data)) {
-                    for (const citation of json.data) {
-                      const text = citation.full_text || citation.text_snippet || '';
-                      if (text) contextChunksForEval.push(text);
+                if (json && typeof json === 'object') {
+                  if (json.event === 'citations') {
+                    citationsData = json.data;
+                    if (Array.isArray(json.data)) {
+                      for (const citation of json.data) {
+                        const text = citation.full_text || citation.text_snippet || '';
+                        if (text) contextChunksForEval.push(text);
+                      }
                     }
+                  } else if (json.event === 'needs_confirmation') {
+                    // Do not accumulate this into fullAssistantContent
+                    continue;
+                  } else {
+                    fullAssistantContent += dataStr;
                   }
                 } else if (typeof json === 'string') {
                   fullAssistantContent += json;

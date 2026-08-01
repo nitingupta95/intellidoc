@@ -7,6 +7,8 @@ export interface Message {
   citations?: any[];
   isStreaming?: boolean;
   createdAt?: string;
+  needsConfirmation?: { pendingId: string; verdict: string; reason: string; goodDocsCount: number } | null;
+  confirmationResolved?: boolean;
 }
 
 export interface Conversation {
@@ -41,6 +43,9 @@ interface ConversationState {
   addMessage: (message: Message) => void;
   appendStreamToLastMessage: (chunk: string) => void;
   setCitationsToLastMessage: (citations: any[]) => void;
+  setConfirmationOnLastMessage: (data: { pending_id: string; verdict: string; reason: string; good_docs_count: number }) => void;
+  resolveWebSearch: (conversationId: string, pendingId: string, consent: boolean) => Promise<void>;
+  _consumeSSEStream: (res: Response, astMsgId: string) => Promise<void>;
 }
 
 export const useConversationStore = create<ConversationState>((set, get) => ({
@@ -146,7 +151,26 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   },
 
   sendMessage: async (content: string, workspaceId: string, knowledgeBaseId?: string, documentId?: string) => {
-    const { activeConversationId, createConversation } = get();
+    const { activeConversationId, createConversation, messages, resolveWebSearch, addMessage } = get();
+
+    // Check for pending web search confirmation
+    const lastAssistantMessage = [...messages].reverse().find(m => m.role === 'assistant');
+    if (lastAssistantMessage?.needsConfirmation && !lastAssistantMessage.confirmationResolved && activeConversationId) {
+      const normalized = content.toLowerCase().trim().replace(/[.,!?;]+$/, '');
+      const affirmative = ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'do it', 'search', 'ya', 'y', 'go ahead', 'please'];
+      const negative = ['no', 'nope', 'nah', "don't", 'stop', 'cancel', 'n'];
+      
+      if (affirmative.includes(normalized)) {
+        addMessage({ id: crypto.randomUUID(), role: 'user', content });
+        await resolveWebSearch(activeConversationId, lastAssistantMessage.needsConfirmation.pendingId, true);
+        return;
+      } else if (negative.includes(normalized)) {
+        addMessage({ id: crypto.randomUUID(), role: 'user', content });
+        await resolveWebSearch(activeConversationId, lastAssistantMessage.needsConfirmation.pendingId, false);
+        return;
+      }
+    }
+
     let conversationId = activeConversationId;
     
     // If no active conversation, create one first
@@ -180,53 +204,107 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       // Check if conversation title changed
       get().loadConversations(workspaceId); // Refresh list to get new title
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-
-      while (!done) {
-        const { value, done: doneReading } = await reader.read();
-        done = doneReading;
-        const chunkValue = decoder.decode(value);
-        
-        const lines = chunkValue.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const dataStr = line.substring(6).replace(/\r$/, '');
-            if (dataStr === '[DONE]') {
-              done = true;
-              break;
-            }
-            try {
-              const json = JSON.parse(dataStr);
-              if (json && typeof json === 'object' && json.event === 'citations') {
-                get().setCitationsToLastMessage(json.data);
-              } else if (typeof json === 'string') {
-                get().appendStreamToLastMessage(json);
-              } else {
-                get().appendStreamToLastMessage(dataStr);
-              }
-            } catch {
-              if (dataStr && !dataStr.startsWith('{')) {
-                get().appendStreamToLastMessage(dataStr);
-              }
-            }
-          }
-        }
-      }
-
-      // Finish streaming
-      set((state) => ({
-        messages: state.messages.map(msg => 
-          msg.id === astMsgId ? { ...msg, isStreaming: false } : msg
-        )
-      }));
+      await get()._consumeSSEStream(res, astMsgId);
 
     } catch (e) {
       console.error('Streaming error:', e);
       get().appendStreamToLastMessage(" Sorry, I encountered an error while processing your request.");
     } finally {
       get().setGenerating(false);
+    }
+  },
+  
+  _consumeSSEStream: async (res: Response, astMsgId: string) => {
+    if (!res.body) return;
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let done = false;
+
+    while (!done) {
+      const { value, done: doneReading } = await reader.read();
+      done = doneReading;
+      const chunkValue = decoder.decode(value);
+      
+      const lines = chunkValue.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const dataStr = line.substring(6).replace(/\r$/, '');
+          if (dataStr === '[DONE]') {
+            done = true;
+            break;
+          }
+          try {
+            const json = JSON.parse(dataStr);
+            if (json && typeof json === 'object') {
+              if (json.event === 'citations') {
+                get().setCitationsToLastMessage(json.data);
+              } else if (json.event === 'needs_confirmation') {
+                get().setConfirmationOnLastMessage(json.data);
+              } else if (typeof json === 'string') {
+                get().appendStreamToLastMessage(json);
+              } else {
+                get().appendStreamToLastMessage(dataStr);
+              }
+            } else if (typeof json === 'string') {
+              get().appendStreamToLastMessage(json);
+            } else {
+              get().appendStreamToLastMessage(dataStr);
+            }
+          } catch {
+            if (dataStr && !dataStr.startsWith('{')) {
+              get().appendStreamToLastMessage(dataStr);
+            }
+          }
+        }
+      }
+    }
+
+    // Finish streaming
+    set((state) => ({
+      messages: state.messages.map(msg => 
+        msg.id === astMsgId ? { ...msg, isStreaming: false } : msg
+      )
+    }));
+  },
+
+  resolveWebSearch: async (conversationId: string, pendingId: string, consent: boolean) => {
+    const { messages, setGenerating, _consumeSSEStream } = get();
+    // Find the last assistant message
+    const lastMsg = [...messages].reverse().find(m => m.role === 'assistant' && m.needsConfirmation?.pendingId === pendingId);
+    if (!lastMsg) return;
+
+    // Optimistically hide the buttons
+    set((state) => ({
+      messages: state.messages.map(msg => 
+        msg.id === lastMsg.id ? { ...msg, confirmationResolved: true, isStreaming: true } : msg
+      )
+    }));
+    
+    setGenerating(true);
+
+    try {
+      const res = await fetch(`/api/conversations/${conversationId}/messages/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pendingId, consent }),
+      });
+
+      if (res.status === 410) {
+        get().appendStreamToLastMessage("\n\nThis confirmation expired — please ask your question again.");
+        set((state) => ({
+          messages: state.messages.map(msg => 
+            msg.id === lastMsg.id ? { ...msg, isStreaming: false } : msg
+          )
+        }));
+        return;
+      }
+
+      await _consumeSSEStream(res, lastMsg.id);
+    } catch (e) {
+      console.error('Resolve error:', e);
+      get().appendStreamToLastMessage("\n\nSorry, I encountered an error while resolving your request.");
+    } finally {
+      setGenerating(false);
     }
   },
 
@@ -250,6 +328,21 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     const lastMessage = newMessages[newMessages.length - 1];
     if (lastMessage && lastMessage.role === 'assistant') {
       lastMessage.citations = citations;
+    }
+    return { messages: newMessages };
+  }),
+
+  setConfirmationOnLastMessage: (data) => set((state) => {
+    const newMessages = [...state.messages];
+    const lastMessage = newMessages[newMessages.length - 1];
+    if (lastMessage && lastMessage.role === 'assistant') {
+      // Map snake_case from backend to camelCase for frontend
+      lastMessage.needsConfirmation = {
+        pendingId: data.pending_id,
+        verdict: data.verdict,
+        reason: data.reason,
+        goodDocsCount: data.good_docs_count,
+      };
     }
     return { messages: newMessages };
   }),

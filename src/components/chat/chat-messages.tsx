@@ -6,6 +6,8 @@ import remarkGfm from "remark-gfm";
 import { MessageSquare, BrainCircuit, Info, User, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SuggestionButton } from "./suggestion-button";
+import { WebSearchConfirmCard } from "./WebSearchConfirmCard";
+import { useConversationStore } from "@/store/conversation-store";
 
 interface ChatMessagesProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,6 +19,7 @@ interface ChatMessagesProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   docDetails: any;
   setInput: (t: string) => void;
+  activeConversationId?: string | null;
 }
 
 export function ChatMessages({
@@ -27,7 +30,9 @@ export function ChatMessages({
   docTitle,
   docDetails,
   setInput,
+  activeConversationId,
 }: ChatMessagesProps) {
+  const resolveWebSearch = useConversationStore(state => state.resolveWebSearch);
   if (hasKey === false) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center space-y-6 max-w-md mx-auto mt-10">
@@ -135,6 +140,21 @@ export function ChatMessages({
                   ))}
                 </div>
               </div>
+            )}
+
+            {msg.needsConfirmation && (
+              <WebSearchConfirmCard 
+                pendingId={msg.needsConfirmation.pendingId}
+                verdict={msg.needsConfirmation.verdict}
+                reason={msg.needsConfirmation.reason}
+                goodDocsCount={msg.needsConfirmation.goodDocsCount}
+                onResolve={(pendingId, consent) => {
+                  if (activeConversationId) {
+                    resolveWebSearch(activeConversationId, pendingId, consent);
+                  }
+                }}
+                resolved={msg.confirmationResolved}
+              />
             )}
 
             {msg.isStreaming && isGenerating && idx === messages.length - 1 && (

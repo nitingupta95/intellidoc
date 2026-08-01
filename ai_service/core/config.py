@@ -18,6 +18,12 @@ class Settings(BaseSettings):
 
     AI_SERVICE_URL: str = "http://localhost:8000"
     
+    # CRAG + Tavily Settings
+    TAVILY_API_KEY: str = ""
+    CRAG_UPPER_THRESHOLD: float = 0.7
+    CRAG_LOWER_THRESHOLD: float = 0.3
+    CRAG_PENDING_TTL_SECONDS: int = 600
+    
     class Config:
         env_file = ".env"
         extra = "ignore"
