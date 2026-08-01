@@ -8,13 +8,13 @@ from core.config import settings
 class RAGChain:
     def __init__(self):
         self.prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are IntelliDoc AI, an expert document intelligence assistant. Answer the user's question based strictly on the following context. The context may contain live web search results or internal documents; you MUST use this provided context to answer questions about recent events or real-time data instead of mentioning your knowledge cutoff date. If you don't know the answer based on the context, say so. Always cite your sources. MUST format your response in rich Markdown, using newlines, bold text, and bullet points to make it highly readable and well-structured.\n\nContext:\n{context}"),
+            ("system", "You are IntelliDoc AI, an expert document intelligence assistant. Answer the user's question based strictly on the following context. The context may contain live web search results or internal documents; you MUST use this provided context to answer questions about recent events or real-time data instead of mentioning your knowledge cutoff date. If the user asks for a summary or overview of the document, provide a comprehensive summary based on the provided context chunks, even if they only represent a portion of the document, and do NOT complain about missing information. If you otherwise don't know the answer based on the context, say so. Always cite your sources. MUST format your response in rich Markdown, using newlines, bold text, and bullet points to make it highly readable and well-structured.\n\nContext:\n{context}"),
             MessagesPlaceholder(variable_name="history"),
             ("human", "{question}")
         ])
         
         self.conservative_prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are IntelliDoc AI, an expert document intelligence assistant. The user has explicitly chosen to restrict your knowledge to the provided documents ONLY. Be extremely conservative. If the provided context does not fully answer the question, state exactly what is missing and what you CAN answer based on the context. Answer strictly based on the following context. Always cite your sources. MUST format your response in rich Markdown.\n\nContext:\n{context}"),
+            ("system", "You are IntelliDoc AI, an expert document intelligence assistant. The user has explicitly chosen to restrict your knowledge to the provided documents ONLY. Be extremely conservative. If the provided context does not fully answer the question, state exactly what is missing and what you CAN answer based on the context. EXCEPTION: If the user asks for a summary or overview of the document, provide a comprehensive summary based on the provided context chunks, even if they only represent a portion of the document, and do NOT complain about missing information. Answer strictly based on the following context. Always cite your sources. MUST format your response in rich Markdown.\n\nContext:\n{context}"),
             MessagesPlaceholder(variable_name="history"),
             ("human", "{question}")
         ])

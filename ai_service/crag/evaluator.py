@@ -62,10 +62,14 @@ async def evaluate_documents(
 
     chain = _get_eval_chain(openai_api_key, gemini_api_key)
     
-    # Heuristic for summarization queries to bypass strict evaluation
+    # Heuristic for summarization and meta-queries to bypass strict evaluation
     question_lower = question.lower()
-    summary_keywords = ["summarize", "summarise", "summary", "overview", "summrsie", "sumarize"]
-    if any(kw in question_lower for kw in summary_keywords) or len(question_lower) < 15 and "doc" in question_lower:
+    meta_keywords = [
+        "summarize", "summarise", "summary", "overview", "summrsie", "sumarize",
+        "question", "questions", "quiz", "key point", "main idea", 
+        "explain this", "what is this document"
+    ]
+    if any(kw in question_lower for kw in meta_keywords) or len(question_lower) < 15 and "doc" in question_lower:
         return EvalResult(
             verdict=EvalVerdict.CORRECT,
             good_docs=citations,

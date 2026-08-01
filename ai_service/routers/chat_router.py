@@ -5,7 +5,7 @@ from controllers.chat_controller import handle_chat_query, handle_chat_resolve
 from services.auth_service import authenticate
 from core.dependencies import get_redis_client
 
-router = APIRouter()
+router = APIRouter(tags=["Chat"])
 
 @router.post("/chat")
 async def chat_endpoint(

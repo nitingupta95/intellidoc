@@ -153,3 +153,53 @@ class QdrantVectorStore:
                 limit=limit
             )
             return result
+
+    async def scroll_chunks(
+        self,
+        workspace_id: str,
+        knowledge_base_id: str = None,
+        document_ids: list[str] = None,
+        limit: int = 20,
+        team_id: str = None,
+        department: str = None,
+        project: str = None
+    ):
+        must_conditions = [
+            FieldCondition(
+                key="metadata.workspace_id",
+                match=MatchAny(any=[workspace_id])
+            )
+        ]
+        
+        if document_ids is not None:
+            must_conditions.append(
+                FieldCondition(
+                    key="metadata.document_id",
+                    match=MatchAny(any=document_ids)
+                )
+            )
+        elif knowledge_base_id:
+            must_conditions.append(
+                FieldCondition(
+                    key="metadata.knowledge_base_id",
+                    match=MatchAny(any=[knowledge_base_id])
+                )
+            )
+
+        if team_id:
+            must_conditions.append(FieldCondition(key="metadata.team_id", match=MatchAny(any=[team_id])))
+        if department:
+            must_conditions.append(FieldCondition(key="metadata.department", match=MatchAny(any=[department])))
+        if project:
+            must_conditions.append(FieldCondition(key="metadata.project", match=MatchAny(any=[project])))
+
+        query_filter = Filter(must=must_conditions)
+        
+        result, _ = await self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=query_filter,
+            limit=limit,
+            with_payload=True,
+            with_vectors=False
+        )
+        return result

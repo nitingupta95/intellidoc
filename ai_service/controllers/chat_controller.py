@@ -75,20 +75,40 @@ async def handle_chat_query(
         t_search_start = time.perf_counter()
         
         vs = await get_vector_store(provider=provider, dimension=dim)
-        search_results = await vs.search(
-            query_vector=query_vector, 
-            limit=15, 
-            workspace_id=request.workspace_id,
-            knowledge_base_id=request.knowledge_base_id,
-            document_ids=request.document_ids,
-            query_text=request.query,
-            team_id=request.team_id,
-            department=request.department,
-            project=request.project
-        )
         
-        if search_results:
-            search_results = reranker.rerank(request.query, search_results, top_k=5)
+        # Check for meta-queries
+        question_lower = request.query.lower()
+        meta_keywords = [
+            "summarize", "summarise", "summary", "overview", "summrsie", "sumarize",
+            "question", "questions", "quiz", "key point", "main idea", 
+            "explain this", "what is this document"
+        ]
+        is_meta_query = any(kw in question_lower for kw in meta_keywords) or (len(question_lower) < 15 and "doc" in question_lower)
+        
+        if is_meta_query:
+            search_results = await vs.scroll_chunks(
+                workspace_id=request.workspace_id,
+                knowledge_base_id=request.knowledge_base_id,
+                document_ids=request.document_ids,
+                limit=20,
+                team_id=request.team_id,
+                department=request.department,
+                project=request.project
+            )
+        else:
+            search_results = await vs.search(
+                query_vector=query_vector, 
+                limit=15, 
+                workspace_id=request.workspace_id,
+                knowledge_base_id=request.knowledge_base_id,
+                document_ids=request.document_ids,
+                query_text=request.query,
+                team_id=request.team_id,
+                department=request.department,
+                project=request.project
+            )
+            if search_results:
+                search_results = reranker.rerank(request.query, search_results, top_k=5)
         
         retrieved_docs = []
         citations = []
@@ -97,7 +117,7 @@ async def handle_chat_query(
             text = payload.get("content", "")
             retrieved_docs.append(text)
             citations.append({
-                "score": res.score,
+                "score": getattr(res, "score", 1.0),
                 "text_snippet": text[:150] + "..." if len(text) > 150 else text,
                 "full_text": text,
                 "metadata": payload.get("metadata", {})
@@ -132,7 +152,7 @@ async def handle_chat_query(
                 pending_id=pending_id,
                 query=request.query,
                 verdict=eval_result.verdict,
-                good_docs=eval_result.good_docs,
+                good_docs=eval_result.good_docs if eval_result.good_docs else citations,
                 workspace_id=request.workspace_id,
                 knowledge_base_id=request.knowledge_base_id,
                 document_ids=request.document_ids,

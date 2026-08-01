@@ -82,16 +82,26 @@ async def refine(
         
     if verdict == "CORRECT":
         docs_to_use = good_docs
-    elif verdict == "INCORRECT":
-        docs_to_use = web_docs
     else:
-        # AMBIGUOUS
+        # For INCORRECT or AMBIGUOUS, mix both local and web search to provide maximum context!
         docs_to_use = good_docs + web_docs
 
     if not docs_to_use:
         return ""
 
     context_str = " ".join([_doc_text(d) for d in docs_to_use])
+    
+    # Bypass sentence filtering for meta-queries
+    question_lower = question.lower()
+    meta_keywords = [
+        "summarize", "summarise", "summary", "overview", "summrsie", "sumarize",
+        "question", "questions", "quiz", "key point", "main idea", 
+        "explain this", "what is this document"
+    ]
+    is_meta_query = any(kw in question_lower for kw in meta_keywords) or (len(question_lower) < 15 and "doc" in question_lower)
+    if is_meta_query:
+        return context_str
+
     sentences = decompose_to_sentences(context_str)
     
     if not sentences:

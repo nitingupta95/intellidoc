@@ -3,7 +3,7 @@ from typing import Optional
 from schemas.document import DocumentProcessRequest
 from controllers.document_controller import handle_document_process
 
-router = APIRouter()
+router = APIRouter(tags=["Documents"])
 
 @router.post("/documents/process")
 async def process_document(

@@ -3,7 +3,7 @@ from typing import Optional
 from schemas.retrieval import RetrieveRequest
 from controllers.retrieval_controller import handle_retrieve
 
-router = APIRouter()
+router = APIRouter(tags=["Retrieval"])
 
 @router.post("/retrieve")
 async def retrieve_endpoint(

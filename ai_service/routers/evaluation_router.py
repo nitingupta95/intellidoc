@@ -3,7 +3,7 @@ from typing import Optional
 from schemas.evaluation import EvaluateRequest, EvaluateResponse
 from controllers.evaluation_controller import handle_evaluate
 
-router = APIRouter()
+router = APIRouter(tags=["Evaluation"])
 
 @router.post("/evaluate", response_model=EvaluateResponse)
 async def evaluate_endpoint(
