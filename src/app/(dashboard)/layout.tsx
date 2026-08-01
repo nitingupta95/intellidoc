@@ -3,6 +3,7 @@ import { BottomNav } from "@/components/layout/bottom-nav";
 import { MainSidebar } from "@/components/layout/MainSidebar";
 import { WorkspaceSwitcher } from "@/components/layout/WorkspaceSwitcher";
 import { OnboardingTour } from "@/components/layout/OnboardingTour";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function DashboardLayout({
   children,
@@ -24,7 +25,8 @@ export default function DashboardLayout({
               ID
             </div>
           </Link>
-          <div className="flex-1 px-4 flex justify-end">
+          <div className="flex-1 px-4 flex justify-end gap-2 items-center">
+            <ThemeToggle />
             <WorkspaceSwitcher isMobile={true} />
           </div>
         </header>

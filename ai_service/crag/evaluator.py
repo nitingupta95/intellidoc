@@ -9,7 +9,7 @@ from core.config import settings
 from .models import DocEvalScore, EvalVerdict, EvalResult
 
 doc_eval_prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a strict retrieval evaluator for RAG. You will be given ONE retrieved chunk and a question. Return a relevance score in [0.0, 1.0]. 1.0 = chunk alone is sufficient to answer fully/mostly. 0.0 = chunk is irrelevant or only mentions the topic without answering the question. Be extremely conservative with high scores; if the question asks for a definition and the chunk only mentions applying for it, the score MUST be 0.0. Also return a short reason. Output JSON only."),
+    ("system", "You are a strict retrieval evaluator for RAG. You will be given ONE retrieved chunk and a question. Return a relevance score in [0.0, 1.0]. 1.0 = chunk alone is sufficient to answer fully/mostly. 0.0 = chunk is irrelevant or only mentions the topic without answering the question. Be extremely conservative with high scores; if the question asks for a definition and the chunk only mentions applying for it, the score MUST be 0.0. EXCEPTION: If the question asks for a general summary, overview, or explanation of the entire document, consider the chunk highly relevant (score 1.0) as long as it contains valid content from the document. Also return a short reason. Output JSON only."),
     ("human", "Question: {question}\n\nChunk:\n{chunk}")
 ])
 
@@ -62,6 +62,17 @@ async def evaluate_documents(
 
     chain = _get_eval_chain(openai_api_key, gemini_api_key)
     
+    # Heuristic for summarization queries to bypass strict evaluation
+    question_lower = question.lower()
+    summary_keywords = ["summarize", "summarise", "summary", "overview", "summrsie", "sumarize"]
+    if any(kw in question_lower for kw in summary_keywords) or len(question_lower) < 15 and "doc" in question_lower:
+        return EvalResult(
+            verdict=EvalVerdict.CORRECT,
+            good_docs=citations,
+            all_scores=[1.0] * len(citations),
+            reason="Summarization/general query detected; bypassing strict relevance filtering."
+        )
+
     # Run evaluation in parallel
     tasks = [_score_single_doc(chain, question, cit) for cit in citations]
     scores: List[DocEvalScore] = await asyncio.gather(*tasks)

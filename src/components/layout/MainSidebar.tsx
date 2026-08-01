@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { LogoutButton } from "@/components/layout/logout-button";
 import { WorkspaceSwitcher } from "@/components/layout/WorkspaceSwitcher";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   LayoutDashboard,
   Files,
@@ -51,12 +52,18 @@ export function MainSidebar() {
         </div>
 
         {!isOpen && (
-          <Button variant="ghost" size="icon" onClick={() => setIsOpen(true)} className="mb-4">
-            <PanelLeftOpen size={18} className="text-muted-foreground" />
-          </Button>
+          <div className="flex flex-col gap-2 mb-4">
+            <Button variant="ghost" size="icon" onClick={() => setIsOpen(true)}>
+              <PanelLeftOpen size={18} className="text-muted-foreground" />
+            </Button>
+            <ThemeToggle />
+          </div>
         )}
         
-        <WorkspaceSwitcher isOpen={isOpen} />
+        <div className="flex items-center gap-2 mb-2">
+          <WorkspaceSwitcher isOpen={isOpen} />
+          {isOpen && <ThemeToggle />}
+        </div>
         
         <nav className="space-y-2 flex-1">
           <NavItem href="/dashboard" icon={<LayoutDashboard size={20} />} label="Dashboard" active={pathname === "/dashboard"} isOpen={isOpen} />

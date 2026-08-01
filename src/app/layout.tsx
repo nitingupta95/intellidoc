@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
+import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
@@ -14,13 +15,19 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className="font-sans antialiased bg-background text-foreground min-h-screen"
       >
-        <AuthProvider>
-          {/* Animated Gradient Background */}
-          <div className="fixed inset-0 z-[-1] overflow-hidden pointer-events-none">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem={false}
+          disableTransitionOnChange
+        >
+          <AuthProvider>
+            {/* Animated Gradient Background */}
+            <div className="fixed inset-0 z-[-1] overflow-hidden pointer-events-none">
             <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/20 rounded-full blur-[120px] animate-pulse duration-10000" />
             <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[120px] animate-pulse duration-10000 delay-1000" />
           </div>
@@ -30,6 +37,7 @@ export default function RootLayout({
           </div>
           <Toaster position="top-right" richColors />
         </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
