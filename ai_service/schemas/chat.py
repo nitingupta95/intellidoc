@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 class ChatRequest(BaseModel):
     query: str
@@ -13,7 +13,7 @@ class ChatRequest(BaseModel):
     project: Optional[str] = None
     
     # Document auto-summaries passed from the Next.js backend
-    document_summaries: Optional[dict[str, str]] = None
+    document_summaries: Optional[Dict[str, str]] = None
 
 class ResolveRequest(BaseModel):
     pending_id: str

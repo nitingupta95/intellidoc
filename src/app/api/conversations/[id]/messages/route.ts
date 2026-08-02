@@ -271,7 +271,9 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
                     if (Array.isArray(json.data)) {
                       for (const citation of json.data) {
                         const text = citation.full_text || citation.text_snippet || '';
-                        if (text) contextChunksForEval.push(text);
+                        if (text && contextChunksForEval.length < 15) {
+                          contextChunksForEval.push(text);
+                        }
                       }
                     }
                   } else if (json.event === 'needs_confirmation') {
