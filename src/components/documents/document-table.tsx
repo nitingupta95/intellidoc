@@ -79,7 +79,11 @@ export function DocumentTable({
             </tr>
           ))}
           {displayedDocuments.map((doc, i) => (
-            <tr key={doc.id || i} className="hover:bg-background/30 transition-colors group">
+            <tr 
+              key={doc.id || i} 
+              className="hover:bg-background/50 hover:text-foreground transition-colors group cursor-pointer"
+              onClick={() => router.push(`/documents/${doc.id}`)}
+            >
               <td className="px-6 py-4">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
@@ -87,18 +91,19 @@ export function DocumentTable({
                   </div>
                   <Link 
                     href={`/documents/${doc.id}`} 
-                    className="font-medium group-hover:text-primary transition-colors hover:underline truncate" 
+                    className="font-medium group-hover:text-foreground transition-colors hover:underline truncate" 
                     title={doc.title || doc.filename}
+                    onClick={(e) => e.stopPropagation()}
                   >
                     {doc.title || doc.filename}
                   </Link>
                 </div>
               </td>
-              <td className="px-6 py-4 text-muted-foreground truncate">{formatMimeType(doc.mimeType)}</td>
-              <td className="px-6 py-4 text-muted-foreground truncate">{(doc.fileSize / 1024 / 1024).toFixed(2)} MB</td>
-              <td className="px-6 py-4 text-muted-foreground truncate">{doc.user?.name || "Unknown"}</td>
+              <td className="px-6 py-4 text-muted-foreground group-hover:text-foreground transition-colors truncate">{formatMimeType(doc.mimeType)}</td>
+              <td className="px-6 py-4 text-muted-foreground group-hover:text-foreground transition-colors truncate">{(doc.fileSize / 1024 / 1024).toFixed(2)} MB</td>
+              <td className="px-6 py-4 text-muted-foreground group-hover:text-foreground transition-colors truncate">{doc.user?.name || "Unknown"}</td>
               <td className="px-6 py-4">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 group-hover:opacity-90">
                   {doc.status === 'INDEXED' ? (
                     <>
                       <CheckCircle2 size={14} className="text-green-500" />
@@ -114,30 +119,35 @@ export function DocumentTable({
                   )}
                 </div>
               </td>
-              <td className="px-6 py-4 text-muted-foreground">{new Date(doc.createdAt).toLocaleDateString()}</td>
+              <td className="px-6 py-4 text-muted-foreground group-hover:text-foreground transition-colors">{new Date(doc.createdAt).toLocaleDateString()}</td>
               <td className="px-6 py-4 text-right">
-                <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center justify-end gap-2 transition-opacity">
                   <Button 
-                    onClick={() => router.push(`/chat?documentId=${doc.id}&documentTitle=${encodeURIComponent(doc.title)}`)}
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8 text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                    title="Chat with Document"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      router.push(`/chat?documentId=${doc.id}&documentTitle=${encodeURIComponent(doc.title || doc.filename || 'Document')}`);
+                    }}
+                    variant="secondary" 
+                    size="sm" 
+                    className="h-8 gap-1.5 transition-all cursor-pointer"
                   >
-                    <MessageSquare size={16} />
+                    <MessageSquare size={14} />
+                    <span>Chat</span>
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                    <MoreVertical size={16} />
-                  </Button>
-                  <Button 
-                    onClick={() => setDocumentToDelete(doc.id)}
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                    title="Delete Document"
-                  >
-                    <Trash2 size={16} />
-                  </Button>
+                  <div className="flex items-center transition-opacity text-muted-foreground/50 hover:text-muted-foreground">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-inherit">
+                      <MoreVertical size={16} />
+                    </Button>
+                    <Button 
+                      onClick={() => setDocumentToDelete(doc.id)}
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                      title="Delete Document"
+                    >
+                      <Trash2 size={16} />
+                    </Button>
+                  </div>
                 </div>
               </td>
             </tr>

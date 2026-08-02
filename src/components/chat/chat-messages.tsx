@@ -7,6 +7,7 @@ import { MessageSquare, BrainCircuit, Info, User, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SuggestionButton } from "./suggestion-button";
 import { WebSearchConfirmCard } from "./WebSearchConfirmCard";
+import { SynthesisBadge } from "./SynthesisBadge";
 import { useConversationStore } from "@/store/conversation-store";
 
 interface ChatMessagesProps {
@@ -143,11 +144,12 @@ export function ChatMessages({
             )}
 
             {msg.needsConfirmation && (
-              <WebSearchConfirmCard 
+              <WebSearchConfirmCard
                 pendingId={msg.needsConfirmation.pendingId}
                 verdict={msg.needsConfirmation.verdict}
                 reason={msg.needsConfirmation.reason}
                 goodDocsCount={msg.needsConfirmation.goodDocsCount}
+                answerability={msg.needsConfirmation.answerability}
                 onResolve={(pendingId, consent) => {
                   if (activeConversationId) {
                     resolveWebSearch(activeConversationId, pendingId, consent);
@@ -155,6 +157,10 @@ export function ChatMessages({
                 }}
                 resolved={msg.confirmationResolved}
               />
+            )}
+
+            {msg.isSynthesized && !msg.needsConfirmation && (
+              <SynthesisBadge />
             )}
 
             {msg.isStreaming && isGenerating && idx === messages.length - 1 && (

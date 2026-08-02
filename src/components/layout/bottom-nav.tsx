@@ -2,15 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Files, MessageSquare, Settings, Database, LogOut, BarChart } from "lucide-react";
+import { LayoutDashboard, Files, MessageSquare, Settings, Database, LogOut, BarChart, Loader2 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { useState } from "react";
 
 export function BottomNav() {
   const pathname = usePathname();
   const [showModal, setShowModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
+    setIsLoggingOut(true);
     await signOut({ callbackUrl: "/login" });
   };
 
@@ -63,15 +65,17 @@ export function BottomNav() {
             <div className="flex items-center justify-end gap-3">
               <button 
                 onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors"
+                disabled={isLoggingOut}
+                className="px-4 py-2 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
               <button 
                 onClick={handleLogout}
-                className="px-4 py-2 text-sm font-medium rounded-lg bg-destructive text-white hover:bg-destructive/90 transition-colors"
+                disabled={isLoggingOut}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-destructive text-white hover:bg-destructive/90 transition-colors cursor-pointer flex items-center justify-center min-w-[90px] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Sign Out
+                {isLoggingOut ? <Loader2 size={16} className="animate-spin" /> : "Sign Out"}
               </button>
             </div>
           </div>

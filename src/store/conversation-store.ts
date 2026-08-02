@@ -7,8 +7,10 @@ export interface Message {
   citations?: any[];
   isStreaming?: boolean;
   createdAt?: string;
-  needsConfirmation?: { pendingId: string; verdict: string; reason: string; goodDocsCount: number } | null;
+  needsConfirmation?: { pendingId: string; verdict: string; reason: string; goodDocsCount: number; answerability?: string } | null;
   confirmationResolved?: boolean;
+  /** Phase 3: true when the answer was synthesized across multiple document sections */
+  isSynthesized?: boolean;
 }
 
 export interface Conversation {
@@ -43,7 +45,8 @@ interface ConversationState {
   addMessage: (message: Message) => void;
   appendStreamToLastMessage: (chunk: string) => void;
   setCitationsToLastMessage: (citations: any[]) => void;
-  setConfirmationOnLastMessage: (data: { pending_id: string; verdict: string; reason: string; good_docs_count: number }) => void;
+  setConfirmationOnLastMessage: (data: { pending_id: string; verdict: string; reason: string; good_docs_count: number; answerability?: string }) => void;
+  setSynthesizedOnLastMessage: (reason?: string) => void;
   resolveWebSearch: (conversationId: string, pendingId: string, consent: boolean) => Promise<void>;
   _consumeSSEStream: (res: Response, astMsgId: string) => Promise<void>;
 }
@@ -240,6 +243,9 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
                 get().setCitationsToLastMessage(json.data);
               } else if (json.event === 'needs_confirmation') {
                 get().setConfirmationOnLastMessage(json.data);
+              } else if (json.event === 'synthesis_mode') {
+                // Phase 3: mark this message as synthesized so SynthesisBadge renders
+                get().setSynthesizedOnLastMessage(json.data?.reason);
               } else if (typeof json === 'string') {
                 get().appendStreamToLastMessage(json);
               } else {
@@ -342,7 +348,17 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         verdict: data.verdict,
         reason: data.reason,
         goodDocsCount: data.good_docs_count,
+        answerability: data.answerability,
       };
+    }
+    return { messages: newMessages };
+  }),
+
+  setSynthesizedOnLastMessage: (_reason?: string) => set((state) => {
+    const newMessages = [...state.messages];
+    const lastMessage = newMessages[newMessages.length - 1];
+    if (lastMessage && lastMessage.role === 'assistant') {
+      lastMessage.isSynthesized = true;
     }
     return { messages: newMessages };
   }),

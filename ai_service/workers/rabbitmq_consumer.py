@@ -22,7 +22,7 @@ async def process_message(message: IncomingMessage):
             user_id = data.get("userId")
             
             # Process it inline using the imported pipeline
-            from main import process_document_pipeline
+            from services.document_service import process_document_pipeline
             await process_document_pipeline(
                 file_path=minio_path,
                 document_id=document_id,

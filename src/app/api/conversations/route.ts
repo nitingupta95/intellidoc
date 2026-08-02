@@ -59,7 +59,12 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { title = 'New Chat', workspaceId, knowledgeBaseId, metadata = {} } = body;
+    const { title = 'New Chat', workspaceId, knowledgeBaseId, documentId, metadata: providedMetadata = {} } = body;
+
+    const metadata = { ...providedMetadata };
+    if (documentId) {
+      metadata.documentId = documentId;
+    }
 
     if (!workspaceId) {
       return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 });
