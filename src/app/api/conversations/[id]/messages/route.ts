@@ -177,22 +177,31 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     const userOpenAIKey = userRecord?.openaiKey || process.env.OPENAI_API_KEY || "";
     const userGeminiKey = userRecord?.geminiKey || process.env.GEMINI_API_KEY || "";
 
-    // Fetch document IDs to restrict search
+    // Fetch document IDs to restrict search and their summaries for web-search sanity check
     let documentIds: string[] = [];
+    const documentSummaries: Record<string, string> = {};
+
     if (metadata.documentId) {
       documentIds = [metadata.documentId];
+      const doc = await db.document.findUnique({
+        where: { id: metadata.documentId },
+        select: { id: true, summary: true }
+      });
+      if (doc && doc.summary) documentSummaries[doc.id] = doc.summary;
     } else if (conversation.knowledgeBaseId) {
       const docs = await db.document.findMany({
         where: { knowledgeBaseId: conversation.knowledgeBaseId },
-        select: { id: true }
+        select: { id: true, summary: true }
       });
       documentIds = docs.map(d => d.id);
+      docs.forEach(d => { if (d.summary) documentSummaries[d.id] = d.summary; });
     } else {
       const docs = await db.document.findMany({
         where: { workspaceId: conversation.workspaceId },
-        select: { id: true }
+        select: { id: true, summary: true }
       });
       documentIds = docs.map(d => d.id);
+      docs.forEach(d => { if (d.summary) documentSummaries[d.id] = d.summary; });
     }
 
     // Proxy stream to FastAPI
@@ -209,6 +218,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         knowledge_base_id: conversation.knowledgeBaseId || null,
         document_ids: documentIds,
         history: formattedHistory,
+        document_summaries: Object.keys(documentSummaries).length > 0 ? documentSummaries : null,
       }),
     });
 

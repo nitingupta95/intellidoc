@@ -11,6 +11,9 @@ class ChatRequest(BaseModel):
     team_id: Optional[str] = None
     department: Optional[str] = None
     project: Optional[str] = None
+    
+    # Document auto-summaries passed from the Next.js backend
+    document_summaries: Optional[dict[str, str]] = None
 
 class ResolveRequest(BaseModel):
     pending_id: str

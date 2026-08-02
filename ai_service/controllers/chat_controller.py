@@ -4,6 +4,7 @@ import json
 import asyncio
 import hashlib
 import uuid
+import re
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi import BackgroundTasks
 
@@ -81,25 +82,28 @@ async def handle_chat_query(
 
         vs = await get_vector_store(provider=provider, dimension=dim)
 
-        # Check for meta-queries
-        question_lower = request.query.lower()
-        meta_keywords = [
-            "summarize", "summarise", "summary", "overview", "summrsie", "sumarize",
-            "question", "questions", "quiz", "key point", "main idea",
-            "explain this", "what is this document"
-        ]
-        is_meta_query = any(kw in question_lower for kw in meta_keywords) or (len(question_lower) < 15 and "doc" in question_lower)
+        SUMMARY_REQUEST_PATTERN = re.compile(
+            r"\b(summar(y|ize|ise)|overview|tldr|recap)\b.*\b(doc|document|pdf|file|whole|entire|this)\b"
+            r"|\b(chapter|section|lecture)s?\b.*\b(by|wise|one by one)\b",
+            re.IGNORECASE,
+        )
 
-        if is_meta_query:
+        is_summary_request = bool(SUMMARY_REQUEST_PATTERN.search(request.query))
+
+        if is_summary_request:
+            logger.info("Summary request detected: bypassing vector search and fetching all chunks.")
+            # Fetch all chunks using scroll
             search_results = await vs.scroll_chunks(
                 workspace_id=request.workspace_id,
                 knowledge_base_id=request.knowledge_base_id,
                 document_ids=request.document_ids,
-                limit=20,
+                limit=1000, # Large limit to get all chunks
                 team_id=request.team_id,
                 department=request.department,
                 project=request.project
             )
+            # Sort by chunk index if available to maintain natural order
+            search_results = sorted(search_results, key=lambda x: x.payload.get("metadata", {}).get("chunk_index", 0))
         else:
             search_results = await vs.search(
                 query_vector=query_vector,
@@ -134,6 +138,21 @@ async def handle_chat_query(
             retrieved_docs = ["No relevant context found in documents."]
 
         t_search = time.perf_counter() - t_search_start
+
+        if is_summary_request:
+            # Bypass CRAG completely for whole-document structural summaries
+            # If the text is massive, we might want to batch, but for now we rely on the large context window.
+            context_to_use = [" ".join(retrieved_docs)]
+            logger.info(f"Bypassing CRAG for summary. Total context length: {len(context_to_use[0])} chars.")
+            return StreamingResponse(
+                _stream_final_answer(
+                    request.query, context_to_use, citations, request.history, chat_id,
+                    request.workspace_id, redis_client, bg_tasks, x_openai_api_key, x_gemini_api_key,
+                    full_resp_key, t0, t_embed, t_search,
+                    synthesized=True,
+                ),
+                media_type="text/event-stream"
+            )
 
         eval_result = await crag_evaluator.evaluate_documents(
             request.query, citations, x_openai_api_key, x_gemini_api_key
@@ -205,6 +224,7 @@ async def handle_chat_query(
             history=request.history or [],
             created_at=time.time(),
             answerability=eval_result.answerability,
+            document_summaries=request.document_summaries,
         )
         await crag_pending_store.save_pending_context(redis_client, ctx)
 
@@ -247,7 +267,7 @@ async def handle_chat_resolve(
 
     if request.consent:
         rewritten = await crag_web_search.rewrite_query(ctx.query, x_openai_api_key, x_gemini_api_key)
-        web_docs = await crag_web_search.web_search(rewritten)
+        web_docs = await crag_web_search.web_search(rewritten, document_summaries=ctx.document_summaries, openai_api_key=x_openai_api_key, gemini_api_key=x_gemini_api_key)
         refined_context = await crag_refiner.refine(
             ctx.query, ctx.verdict, ctx.good_docs, web_docs,
             openai_api_key=x_openai_api_key, gemini_api_key=x_gemini_api_key

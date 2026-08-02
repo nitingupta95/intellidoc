@@ -83,3 +83,4 @@ class PendingCRAGContext(BaseModel):
     created_at:        float
     # Phase 1 addition: carry answerability through the pending context
     answerability:     str = Answerability.INSUFFICIENT
+    document_summaries: Optional[Dict[str, str]] = None
