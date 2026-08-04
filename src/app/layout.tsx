@@ -1,12 +1,26 @@
 import type { Metadata } from "next";
+import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+const outfit = Outfit({ subsets: ["latin"], variable: "--font-heading" });
+import { env } from "@/env";
 import { AuthProvider } from "@/components/auth-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "sonner";
+import { JsonLd } from "@/components/seo/JsonLd";
 
 export const metadata: Metadata = {
-  title: "IntelliDoc AI | Enterprise Document Intelligence",
+  metadataBase: new URL(env.NEXT_PUBLIC_SITE_URL),
+  title: {
+    template: "%s | IntelliDoc AI",
+    default: "IntelliDoc AI | Enterprise Document Intelligence",
+  },
   description: "Transform static documents into intelligent knowledge with IntelliDoc AI.",
+  applicationName: "IntelliDoc AI",
+  twitter: {
+    card: "summary_large_image",
+  },
 };
 
 export default function RootLayout({
@@ -15,7 +29,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${outfit.variable}`}>
       <body
         className="font-sans antialiased bg-background text-foreground min-h-screen"
       >
@@ -25,6 +39,16 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
+          <JsonLd 
+            data={{
+              "@context": "https://schema.org",
+              "@type": "Organization",
+              name: "IntelliDoc AI",
+              url: env.NEXT_PUBLIC_SITE_URL,
+              logo: `${env.NEXT_PUBLIC_SITE_URL}/favicon.ico`,
+              sameAs: ["https://github.com/nitingupta95/intellidoc"]
+            }}
+          />
           <AuthProvider>
             {/* Animated Gradient Background */}
             <div className="fixed inset-0 z-[-1] overflow-hidden pointer-events-none">

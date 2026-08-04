@@ -1,13 +1,19 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import type { Metadata } from "next";
+import { env } from "@/env";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Privacy Policy | IntelliDoc AI",
+  description: "Read the IntelliDoc AI Privacy Policy to understand how we collect, use, and protect your enterprise document data and personal information securely.",
+  alternates: {
+    canonical: `${env.NEXT_PUBLIC_SITE_URL}/privacy`,
+  },
 };
 
 export default function PrivacyPage() {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[#050505] text-gray-900 dark:text-[#FAFAFA] font-sans selection:bg-black/10 dark:selection:bg-white/20 px-6 py-24">
+    <main className="min-h-screen bg-gray-50 dark:bg-[#050505] text-gray-900 dark:text-[#FAFAFA] font-sans selection:bg-black/10 dark:selection:bg-white/20 px-6 py-24">
       <div className="max-w-3xl mx-auto">
         <Link href="/" className="inline-flex items-center text-sm text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors mb-8">
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -15,7 +21,7 @@ export default function PrivacyPage() {
         </Link>
         <h1 className="text-4xl font-bold tracking-tight mb-8">Privacy Policy</h1>
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-6">
-          <p className="text-sm text-gray-500">Last updated: {new Date().toLocaleDateString()}</p>
+          <p className="text-sm text-gray-500">Last updated: August 4, 2026</p>
           
           <section>
             <h2 className="text-2xl font-semibold mb-4">1. Information We Collect</h2>
@@ -46,6 +52,6 @@ export default function PrivacyPage() {
           </section>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

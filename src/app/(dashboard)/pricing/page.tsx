@@ -6,70 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useRazorpayCheckout } from "@/components/payments/RazorpayCheckout";
 import { cn } from "@/lib/utils";
 
-const PLANS = [
-  {
-    key: "FREE" as const,
-    name: "Free",
-    price: "₹0",
-    period: "forever",
-    description: "Get started with essential document tools.",
-    icon: Zap,
-    features: [
-      "5 document uploads",
-      "50 AI queries / month",
-      "500 MB storage",
-      "Basic document analysis",
-    ],
-    cta: "Current Plan",
-    popular: false,
-    gradient: "from-slate-500/20 to-slate-600/10",
-    iconColor: "text-slate-400",
-    borderColor: "border-border/50",
-  },
-  {
-    key: "PRO" as const,
-    name: "Pro",
-    price: "₹499",
-    period: "month",
-    description: "For professionals who need more power.",
-    icon: Sparkles,
-    features: [
-      "100 document uploads",
-      "2,000 AI queries / month",
-      "10 GB storage",
-      "Advanced AI analysis",
-      "Priority processing",
-      "Email support",
-    ],
-    cta: "Upgrade to Pro",
-    popular: true,
-    gradient: "from-indigo-500/20 to-purple-600/10",
-    iconColor: "text-indigo-400",
-    borderColor: "border-indigo-500/40",
-  },
-  {
-    key: "ENTERPRISE" as const,
-    name: "Enterprise",
-    price: "₹1,999",
-    period: "month",
-    description: "For teams that demand the best.",
-    icon: Crown,
-    features: [
-      "Unlimited uploads",
-      "Unlimited AI queries",
-      "100 GB storage",
-      "Team collaboration",
-      "Advanced analytics",
-      "Dedicated support",
-      "Custom integrations",
-    ],
-    cta: "Upgrade to Enterprise",
-    popular: false,
-    gradient: "from-amber-500/20 to-orange-600/10",
-    iconColor: "text-amber-400",
-    borderColor: "border-amber-500/30",
-  },
-];
+import { PLANS } from "@/config/pricing";
 
 export default function PricingPage() {
   const { handlePayment, loading } = useRazorpayCheckout();

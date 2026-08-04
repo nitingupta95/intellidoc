@@ -15,6 +15,7 @@ const clientSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),
   NEXT_PUBLIC_API_URL: z.string().url().default('http://localhost:8000/api/v1'),
   NEXT_PUBLIC_RAZORPAY_KEY_ID: z.string().optional(),
+  NEXT_PUBLIC_SITE_URL: z.string().url({ message: "NEXT_PUBLIC_SITE_URL must be a valid URL and cannot be missing or fallback silently." }),
 });
 
 const processEnv = {
@@ -29,6 +30,7 @@ const processEnv = {
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
   NEXT_PUBLIC_RAZORPAY_KEY_ID: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+  NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
 };
 
 // Validate environment variables
@@ -43,7 +45,8 @@ if (!parsedServer.success) {
 }
 
 if (!parsedClient.success) {
-  console.warn('⚠️ Invalid client environment variables:', parsedClient.error.format());
+  console.error('❌ Invalid client environment variables:', parsedClient.error.format());
+  throw new Error('Invalid client environment variables (NEXT_PUBLIC_SITE_URL is required and must be a valid URL).');
 }
 
 export const env = {
