@@ -2,6 +2,7 @@ import { NextResponse, after } from 'next/server';
 import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { API_BASE_URL } from '@/lib/api';
+import { creditGuard } from '@/middleware/creditGuard';
 
 export const maxDuration = 60; // Allow enough time for background RAGAS evaluation
 
@@ -176,6 +177,10 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     const userRecord = await db.user.findUnique({ where: { id: session.user.id } });
     const userOpenAIKey = userRecord?.openaiKey || process.env.OPENAI_API_KEY || "";
     const userGeminiKey = userRecord?.geminiKey || process.env.GEMINI_API_KEY || "";
+    const isBYOK = !!(userRecord?.openaiKey || userRecord?.geminiKey);
+
+    const creditBlock = await creditGuard(session.user.id, isBYOK);
+    if (creditBlock) return creditBlock;
 
     // Fetch document IDs to restrict search and their summaries for web-search sanity check
     let documentIds: string[] = [];
@@ -211,6 +216,8 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         'Content-Type': 'application/json',
         'X-OpenAI-API-Key': userOpenAIKey,
         'X-Gemini-API-Key': userGeminiKey,
+        'X-Uses-System-Key': isBYOK ? 'false' : 'true',
+        'X-User-Id': session.user.id,
       },
       body: JSON.stringify({
         query: message,

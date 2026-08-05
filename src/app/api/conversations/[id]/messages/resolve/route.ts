@@ -37,6 +37,8 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         'Content-Type': 'application/json',
         'X-OpenAI-API-Key': userOpenAIKey,
         'X-Gemini-API-Key': userGeminiKey,
+        'X-User-Id': session.user.id,
+        'X-User-Plan': userRecord?.plan || "FREE",
       },
       body: JSON.stringify({
         pending_id: pendingId,

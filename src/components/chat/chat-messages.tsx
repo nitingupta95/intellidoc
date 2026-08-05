@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button";
 import { SuggestionButton } from "./suggestion-button";
 import { WebSearchConfirmCard } from "./WebSearchConfirmCard";
 import { SynthesisBadge } from "./SynthesisBadge";
+import { CreditExhaustedModal } from "./CreditExhaustedModal";
 import { useConversationStore } from "@/store/conversation-store";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 interface ChatMessagesProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -34,33 +37,22 @@ export function ChatMessages({
   activeConversationId,
 }: ChatMessagesProps) {
   const resolveWebSearch = useConversationStore(state => state.resolveWebSearch);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (hasKey === false) {
+      router.push("/billing");
+    }
+  }, [hasKey, router]);
+
   if (hasKey === false) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center space-y-6 max-w-md mx-auto mt-10">
-        <div className="w-16 h-16 rounded-full bg-destructive/10 border border-destructive/20 flex items-center justify-center text-destructive mb-4">
-          <Info size={32} />
-        </div>
-        <h2 className="text-2xl font-heading font-semibold">API Key Required</h2>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <h2 className="text-xl font-heading font-semibold">Redirecting to Billing...</h2>
         <p className="text-muted-foreground text-sm">
-          You must provide an OpenAI or Gemini API Key to use the IntelliDoc Assistant. 
-          Please upload your API key in the settings tab to continue.
+          You need AI credits or an API key to continue.
         </p>
-
-        <div className="mt-4 p-4 rounded-xl bg-primary/10 border border-primary/20 text-left w-full">
-          <h3 className="font-semibold text-primary text-sm mb-1">Need a free API key?</h3>
-          <p className="text-xs text-muted-foreground mb-3">
-            You can get a free Gemini API key from Google AI Studio. 
-          </p>
-          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">
-            <Button variant="outline" className="w-full text-xs h-8">Get Free Gemini Key</Button>
-          </a>
-        </div>
-        
-        <div className="mt-6 w-full">
-          <Link href="/settings">
-            <Button className="w-full">Go to Settings</Button>
-          </Link>
-        </div>
       </div>
     );
   }
@@ -179,6 +171,7 @@ export function ChatMessages({
         </div>
       ))}
       <div ref={messagesEndRef} />
+      <CreditExhaustedModal />
     </div>
   );
 }

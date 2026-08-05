@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, purpose } = body;
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return NextResponse.json(
@@ -20,7 +20,62 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Find the pending payment
+    // ── CRITICAL: Server-side signature verification ───────
+    const isValid = verifyPaymentSignature(
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature
+    );
+
+    if (purpose === "credits") {
+      const tx = await db.creditTransaction.findUnique({
+        where: { razorpayOrderId: razorpay_order_id },
+      });
+
+      if (!tx) {
+        return NextResponse.json({ error: "Credit transaction not found" }, { status: 404 });
+      }
+
+      if (!isValid) {
+        await db.creditTransaction.update({
+          where: { id: tx.id },
+          data: { status: "FAILED" },
+        });
+        return NextResponse.json(
+          { error: "Invalid payment signature. Payment verification failed." },
+          { status: 400 }
+        );
+      }
+
+      if (tx.status === "COMPLETED") {
+        return NextResponse.json({ success: true, message: "Payment already verified" });
+      }
+
+      // Atomic transaction: update tx + wallet
+      await db.$transaction([
+        db.creditTransaction.update({
+          where: { id: tx.id },
+          data: {
+            status: "COMPLETED",
+            razorpayPaymentId: razorpay_payment_id,
+          },
+        }),
+        db.creditWallet.update({
+          where: { id: tx.walletId },
+          data: {
+            balance: { increment: tx.amount },
+            lifetimeGranted: { increment: tx.amount },
+          },
+        }),
+      ]);
+
+      return NextResponse.json({
+        success: true,
+        message: "Credits purchased successfully!",
+      });
+    }
+
+    // Find the pending payment for plan subscriptions
     const payment = await db.payment.findUnique({
       where: { razorpayOrderId: razorpay_order_id },
     });
@@ -36,13 +91,6 @@ export async function POST(req: NextRequest) {
     if (payment.status === "SUCCESS") {
       return NextResponse.json({ error: "Payment already verified" }, { status: 400 });
     }
-
-    // ── CRITICAL: Server-side signature verification ───────
-    const isValid = verifyPaymentSignature(
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature
-    );
 
     if (!isValid) {
       // Mark payment as failed

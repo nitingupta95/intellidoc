@@ -30,12 +30,17 @@ async def handle_chat_query(
     redis_client,
     x_openai_api_key: str,
     x_gemini_api_key: str,
-    user: dict
+    user: dict,
+    fastapi_req=None
 ):
     try:
         t0 = time.perf_counter()
         logger.error(f"CHAT ENDPOINT REACHED FOR QUERY: {request.query}")
 
+        user_id = fastapi_req.headers.get("x-user-id") if fastapi_req else None
+        uses_system_key = fastapi_req.headers.get("x-uses-system-key", "true").lower() == "true" if fastapi_req else False
+        model = "gpt-4o"
+        
         q_hash = hashlib.sha256(request.query.encode()).hexdigest()
         doc_ids_str = ",".join(sorted(request.document_ids)) if request.document_ids else "all"
         kb_id_str = request.knowledge_base_id or "none"
@@ -150,6 +155,7 @@ async def handle_chat_query(
                     request.workspace_id, redis_client, bg_tasks, x_openai_api_key, x_gemini_api_key,
                     full_resp_key, t0, t_embed, t_search,
                     synthesized=True,
+                    user_id=user_id, uses_system_key=uses_system_key, model=model
                 ),
                 media_type="text/event-stream"
             )
@@ -178,6 +184,7 @@ async def handle_chat_query(
                     request.workspace_id, redis_client, bg_tasks, x_openai_api_key, x_gemini_api_key,
                     full_resp_key, t0, t_embed, t_search,
                     synthesized=is_synthesized,
+                    user_id=user_id, uses_system_key=uses_system_key, model=model
                 ),
                 media_type="text/event-stream"
             )
@@ -206,6 +213,7 @@ async def handle_chat_query(
                         full_resp_key=None,  # don't cache ambiguous synthesis
                         t0=t0, t_embed=t_embed, t_search=t_search,
                         synthesized=True,
+                        user_id=user_id, uses_system_key=uses_system_key, model=model
                     ),
                     media_type="text/event-stream"
                 )
@@ -253,7 +261,8 @@ async def handle_chat_resolve(
     redis_client,
     x_openai_api_key: str,
     x_gemini_api_key: str,
-    user: dict
+    user: dict,
+    fastapi_req=None
 ):
     ctx = await crag_pending_store.load_pending_context(redis_client, request.pending_id)
 
@@ -262,6 +271,10 @@ async def handle_chat_resolve(
             status_code=410,
             content={"error": "This confirmation has expired or was already used. Please ask your question again."}
         )
+
+    user_id = fastapi_req.headers.get("x-user-id") if fastapi_req else None
+    uses_system_key = fastapi_req.headers.get("x-uses-system-key", "true").lower() == "true" if fastapi_req else False
+    model = "gpt-4o"
 
     chat_id = ctx.history[-1].get("chat_id", "default") if ctx.history else "default"
 
@@ -284,9 +297,23 @@ async def handle_chat_resolve(
             context_to_use = [refined_context]
         else:
             context_to_use = [w["page_content"] for w in web_docs]
+            
+        # Estimate extra tokens used by Web Search pipeline
+        # - rewrite_query uses the question
+        extra_prompt_tokens = len(ctx.query) // 3.5
+        extra_completion_tokens = 15 # rewrite output usually short
+        
+        # - refine uses query + web docs + good docs
+        extra_prompt_tokens += sum([len(w["page_content"]) // 3.5 for w in web_docs])
+        extra_prompt_tokens += sum([len(d.get("full_text", "")) // 3.5 for d in ctx.good_docs])
+        extra_completion_tokens += 300 # rough estimate for refined context length
+        
         return StreamingResponse(_stream_final_answer(
             ctx.query, context_to_use, citations_for_stream, ctx.history, chat_id,
-            ctx.workspace_id, redis_client, bg_tasks, x_openai_api_key, x_gemini_api_key
+            ctx.workspace_id, redis_client, bg_tasks, x_openai_api_key, x_gemini_api_key,
+            user_id=user_id, uses_system_key=uses_system_key, model=model,
+            extra_prompt_tokens=int(extra_prompt_tokens),
+            extra_completion_tokens=int(extra_completion_tokens)
         ), media_type="text/event-stream")
 
     else:
@@ -304,8 +331,15 @@ async def handle_chat_resolve(
                 yield "data: [DONE]\n\n"
             return StreamingResponse(canned_generator(), media_type="text/event-stream")
 
+        # Estimate extra tokens for refinement only
+        extra_prompt_tokens = sum([len(d.get("full_text", "")) // 3.5 for d in ctx.good_docs])
+        extra_completion_tokens = 300
+        
         return StreamingResponse(_stream_final_answer(
             ctx.query, [refined_context], citations_for_stream, ctx.history, chat_id,
             ctx.workspace_id, redis_client, bg_tasks, x_openai_api_key, x_gemini_api_key,
-            conservative=True
+            conservative=True,
+            user_id=user_id, uses_system_key=uses_system_key, model=model,
+            extra_prompt_tokens=int(extra_prompt_tokens),
+            extra_completion_tokens=int(extra_completion_tokens)
         ), media_type="text/event-stream")

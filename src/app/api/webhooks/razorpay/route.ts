@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { verifyWebhookSignature, calculatePeriodEnd } from "@/lib/razorpay";
+import { CREDIT_PACKS, CreditPackId } from "@/lib/creditPacks";
 import type { Plan } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
@@ -49,7 +50,6 @@ export async function POST(req: NextRequest) {
     const payload = event.payload;
 
     switch (eventType) {
-      case "payment.authorized":
       case "payment.captured": {
         const payment = payload?.payment?.entity;
         if (!payment) break;
@@ -57,7 +57,69 @@ export async function POST(req: NextRequest) {
         const orderId = payment.order_id;
         if (!orderId) break;
 
-        // Update our payment record
+        const notes = payment.notes || {};
+        
+        if (notes.purpose === "credits") {
+          const packId = notes.packId as CreditPackId;
+          const pack = CREDIT_PACKS[packId];
+          const userId = notes.userId;
+
+          if (pack && userId) {
+            const existingTx = await db.creditTransaction.findUnique({
+              where: { razorpayOrderId: orderId }
+            });
+
+            if (existingTx && existingTx.status === "COMPLETED") {
+              break; // Idempotency: already processed by frontend verify or previous webhook
+            }
+
+            if (existingTx && existingTx.status === "PENDING") {
+              await db.$transaction([
+                db.creditTransaction.update({
+                  where: { id: existingTx.id },
+                  data: {
+                    status: "COMPLETED",
+                    razorpayPaymentId: payment.id,
+                  },
+                }),
+                db.creditWallet.update({
+                  where: { id: existingTx.walletId },
+                  data: {
+                    balance: { increment: pack.credits },
+                    lifetimeGranted: { increment: pack.credits },
+                  },
+                }),
+              ]);
+            } else if (!existingTx) {
+              const wallet = await db.creditWallet.findUnique({ where: { userId } });
+              if (wallet) {
+                await db.$transaction([
+                  db.creditTransaction.create({
+                    data: {
+                      walletId: wallet.id,
+                      type: "PURCHASE",
+                      status: "COMPLETED",
+                      amount: pack.credits,
+                      razorpayOrderId: orderId,
+                      razorpayPaymentId: payment.id,
+                      metadata: { packId: pack.id, priceInr: pack.priceInr },
+                    },
+                  }),
+                  db.creditWallet.update({
+                    where: { id: wallet.id },
+                    data: {
+                      balance: { increment: pack.credits },
+                      lifetimeGranted: { increment: pack.credits },
+                    },
+                  }),
+                ]);
+              }
+            }
+          }
+          break; // Stop further processing (it's not a plan subscription)
+        }
+
+        // Update our subscription payment record
         await db.payment.updateMany({
           where: { razorpayOrderId: orderId },
           data: {
@@ -76,6 +138,14 @@ export async function POST(req: NextRequest) {
         if (!orderId) break;
 
         await db.payment.updateMany({
+          where: { razorpayOrderId: orderId },
+          data: {
+            razorpayPaymentId: payment.id,
+            status: "FAILED",
+          },
+        });
+
+        await db.creditTransaction.updateMany({
           where: { razorpayOrderId: orderId },
           data: {
             razorpayPaymentId: payment.id,

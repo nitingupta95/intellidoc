@@ -209,10 +209,10 @@ class TestChunkingIssues:
     QUESTION = "What are the product prices in the pricing table?"
     # Headers ("Product | Price | Stock") were in a different chunk that was NOT retrieved
     CONTEXT_CHUNKS = [
+        # Completely unrelated chunk retrieved by the retriever (placed first to penalize rank-aware precision)
+        "Our company was founded in 2010 in San Francisco, California.",
         # Data rows only — no header row to confirm which column is which
         "Widget A | 29.99 | 500\nWidget B | 49.99 | 300\nWidget C | 19.99 | 1200",
-        # Completely unrelated chunk retrieved by the retriever
-        "Our company was founded in 2010 in San Francisco, California.",
     ]
     ANSWER = (
         "Based on the pricing table, the product prices are: "
@@ -275,7 +275,7 @@ class TestStaleKnowledgeBase:
         "The policy applies to all employees who have completed their 6-month probation period.",
     ]
     ANSWER = (
-        "According to the current policy, employees can work remotely up to 2 days per week "
+        "According to the 2025 policy, employees can work remotely up to 2 days per week "
         "with manager approval. Requests must be submitted through the HR portal at least "
         "1 week in advance. The policy applies to employees who have completed their "
         "6-month probation period."
@@ -325,9 +325,9 @@ class TestStaleKnowledgeBase:
             self.ANSWER, self.CONTEXT_CHUNKS, openai_api_key=openai_key
         )
         assert score >= 0, "Evaluation error"
-        assert score > 0.7, (
-            f"Faithfulness={score:.3f} should be high — answer correctly reflects 2023 context. "
-            f"Staleness is a temporal issue, not a hallucination issue."
+        assert score >= 0.6, (
+            f"Faithfulness={score:.3f} should be moderate — answer correctly reflects 2023 context "
+            f"for the rules, but the '2025' claim reduces faithfulness slightly."
         )
 
     @pytest.mark.integration

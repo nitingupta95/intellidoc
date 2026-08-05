@@ -64,6 +64,7 @@ model User {
   sessions      Session[]
   payments      Payment[]
   subscriptions Subscription[]
+  creditWallet  CreditWallet?
   sharedLinks   SharedLink[]
 }
 
@@ -375,3 +376,53 @@ model VerificationToken {
 
   @@unique([identifier, token])
 }
+
+// ── Credit & Billing ───────────────────────────────────────
+
+model CreditWallet {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id])
+  balance       Int      @default(0)      // in Credits, integer, never float
+  lifetimeGranted Int    @default(0)
+  lifetimeSpent   Int    @default(0)
+  lowBalanceWarnedAt DateTime?
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+  transactions  CreditTransaction[]
+}
+
+enum CreditTxType {
+  SIGNUP_GRANT
+  PURCHASE
+  DEBIT_CHAT
+  DEBIT_EMBEDDING
+  DEBIT_VOICE
+  DEBIT_SUMMARY
+  REFUND
+  ADJUSTMENT
+}
+
+enum CreditTxStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model CreditTransaction {
+  id              String         @id @default(cuid())
+  walletId        String
+  wallet          CreditWallet   @relation(fields: [walletId], references: [id])
+  type            CreditTxType
+  status          CreditTxStatus @default(COMPLETED)
+  amount          Int            // positive = credit, negative = debit
+  balanceAfter    Int?           // snapshot for audit trail
+  razorpayOrderId String?        @unique
+  razorpayPaymentId String?      @unique
+  metadata        Json?          // { model, promptTokens, completionTokens, audioSeconds, requestId, conversationId }
+  createdAt       DateTime       @default(now())
+
+  @@index([walletId, createdAt])
+  @@index([razorpayOrderId])
+}
+

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Files, MessageSquare, Settings, Database, LogOut, BarChart, Loader2 } from "lucide-react";
+import { LayoutDashboard, Files, MessageSquare, Settings, Database, LogOut, BarChart, Loader2, CreditCard } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { useState } from "react";
 
@@ -22,6 +22,7 @@ export function BottomNav() {
     { href: "/documents", icon: <Files size={24} />, label: "Files" },
     { href: "/knowledge-bases", icon: <Database size={24} />, label: "KBs" },
     { href: "/chat", icon: <MessageSquare size={24} />, label: "Chat" },
+    { href: "/billing", icon: <CreditCard size={24} />, label: "Billing" },
     { href: "/settings", icon: <Settings size={24} />, label: "Settings" },
   ];
 

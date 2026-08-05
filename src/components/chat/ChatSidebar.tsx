@@ -5,8 +5,9 @@ import { useConversationStore } from "@/store/conversation-store";
 import { useWorkspaceStore } from "@/store/workspace-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MessageSquarePlus, Search, MoreVertical, Trash2, Edit2, Pin, Archive, Loader2 } from "lucide-react";
+import { MessageSquarePlus, Search, MoreVertical, Trash2, Edit2, Pin, Archive, Loader2, AlertCircle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import Link from "next/link";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
@@ -28,7 +29,10 @@ export function ChatSidebar({ className }: { className?: string }) {
     createConversation,
     deleteConversation,
     renameConversation,
-    isLoading
+    isLoading,
+    walletBalance,
+    isBYOK,
+    fetchWalletBalance
   } = useConversationStore();
   
   const { activeWorkspaceId } = useWorkspaceStore();
@@ -43,7 +47,8 @@ export function ChatSidebar({ className }: { className?: string }) {
     if (activeWorkspaceId) {
       loadConversations(activeWorkspaceId);
     }
-  }, [loadConversations, activeWorkspaceId]);
+    fetchWalletBalance();
+  }, [loadConversations, activeWorkspaceId, fetchWalletBalance]);
 
   const handleNewChat = async () => {
     setActiveConversation(null);
@@ -103,6 +108,21 @@ export function ChatSidebar({ className }: { className?: string }) {
         </div>
       </div>
       
+      {!isBYOK && walletBalance !== null && walletBalance < 5000 && (
+        <div className="mx-4 mb-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm flex flex-col gap-2 animate-in fade-in shrink-0">
+          <div className="flex items-center gap-2 text-destructive font-medium">
+            <AlertCircle size={16} />
+            <span>Low Credits</span>
+          </div>
+          <span className="text-muted-foreground text-xs">
+            You have {walletBalance} credits remaining.
+          </span>
+          <Link href="/settings" className="text-primary hover:underline text-xs font-medium">
+            Refill now &rarr;
+          </Link>
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-thin">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">

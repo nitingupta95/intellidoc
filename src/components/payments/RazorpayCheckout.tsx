@@ -136,5 +136,73 @@ export function useRazorpayCheckout(options?: UseRazorpayCheckoutOptions) {
     [loadScript, options, router]
   );
 
-  return { handlePayment, loading };
+  const handleCreditPurchase = useCallback(
+    async (packId: string) => {
+      setLoading(true);
+
+      try {
+        const loaded = await loadScript();
+        if (!loaded) throw new Error("Failed to load Razorpay SDK");
+
+        const orderRes = await fetch("/api/payments/create-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ purpose: "credits", packId }),
+        });
+
+        const orderData = await orderRes.json();
+        if (!orderRes.ok) {
+          throw new Error(orderData.error || "Failed to create order");
+        }
+
+        const rzpOptions = {
+          key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+          amount: orderData.amount,
+          currency: orderData.currency,
+          name: "IntelliDoc AI",
+          description: `Credits Refill`,
+          order_id: orderData.orderId,
+          theme: { color: "#6366f1", backdrop_color: "rgba(0,0,0,0.7)" },
+          modal: { ondismiss: () => setLoading(false) },
+          handler: async (response: any) => {
+            try {
+              const verifyRes = await fetch("/api/payments/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ...response, purpose: "credits" }),
+              });
+              
+              const verifyData = await verifyRes.json();
+              if (!verifyRes.ok) throw new Error(verifyData.error || "Verification failed");
+
+              toast.success("Credits Added Successfully!");
+              options?.onSuccess?.();
+              router.refresh();
+            } catch (err: any) {
+              toast.error("Verification Failed", { description: err.message });
+              options?.onFailure?.(err.message);
+            } finally {
+              setLoading(false);
+            }
+          },
+          prefill: {},
+        };
+
+        const rzp = new window.Razorpay(rzpOptions);
+        rzp.on("payment.failed", (response: any) => {
+          toast.error("Payment Failed", { description: response.error?.description });
+          options?.onFailure?.(response.error?.description);
+          setLoading(false);
+        });
+        rzp.open();
+      } catch (err: any) {
+        toast.error("Payment Error", { description: err.message });
+        options?.onFailure?.(err.message);
+        setLoading(false);
+      }
+    },
+    [loadScript, options, router]
+  );
+
+  return { handlePayment, handleCreditPurchase, loading };
 }

@@ -2,9 +2,12 @@ import logging
 import asyncio
 import json
 import time
+import os
+import httpx
 from typing import List, Optional
 from fastapi import BackgroundTasks
 from llm.rag_chain import RAGChain
+from services.credit_accounting import estimate_prompt_tokens, credits_for_usage
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +34,40 @@ async def log_analytics_event(event_type: str, data: dict):
     logger.info(f"Logged analytics event: {event_type}")
 
 
+async def debit_wallet_task(user_id: str, uses_system_key: bool, model: str, question: str, context_docs: List[str], answer: str, history: List[dict], extra_prompt_tokens: int = 0, extra_completion_tokens: int = 0):
+    if not uses_system_key or not user_id:
+        return
+
+    # Estimate prompt
+    messages = history + [{"role": "user", "content": question}]
+    prompt_tokens = estimate_prompt_tokens(model, messages, context_docs) + extra_prompt_tokens
+    
+    # Estimate completion
+    completion_tokens = estimate_prompt_tokens(model, [{"content": answer}], []) + extra_completion_tokens
+    
+    cost = credits_for_usage(model, prompt_tokens, completion_tokens)
+    if cost <= 0:
+        return
+        
+    app_url = os.environ.get("APP_URL", "http://localhost:3000")
+    secret = os.environ.get("INTERNAL_SERVICE_SECRET", "default_internal_secret_for_dev")
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post(
+                f"{app_url}/api/internal/wallet/{user_id}/debit",
+                headers={"Authorization": f"Bearer {secret}"},
+                json={"amount": cost, "metadata": {"model": model, "prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens}},
+                timeout=10.0
+            )
+            if resp.status_code != 200:
+                logger.error(f"Failed to debit wallet for user {user_id}: {resp.text}")
+            else:
+                logger.info(f"Debited {cost} credits from user {user_id}")
+        except Exception as e:
+            logger.error(f"Exception during debit for user {user_id}: {e}")
+
+
 async def _stream_final_answer(
     question: str,
     context_docs: List[str],
@@ -48,6 +85,11 @@ async def _stream_final_answer(
     t_search: float = 0,
     conservative: bool = False,
     synthesized: bool = False,
+    user_id: Optional[str] = None,
+    uses_system_key: bool = False,
+    model: str = "gpt-4o",
+    extra_prompt_tokens: int = 0,
+    extra_completion_tokens: int = 0,
 ):
     """
     Streams the final RAG answer back to the client.
@@ -118,6 +160,7 @@ async def _stream_final_answer(
 
         bg_tasks.add_task(save_chat_to_db, chat_id, question, full_answer, workspace_id)
         bg_tasks.add_task(log_analytics_event, "chat_query", metrics)
+        bg_tasks.add_task(debit_wallet_task, user_id, uses_system_key, model, question, context_docs, full_answer, history, extra_prompt_tokens, extra_completion_tokens)
 
         if history:
             bg_tasks.add_task(compress_history_task, chat_id, history, redis_client, x_openai_api_key, x_gemini_api_key)

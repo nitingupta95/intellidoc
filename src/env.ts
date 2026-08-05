@@ -9,6 +9,9 @@ const serverSchema = z.object({
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+  INTERNAL_SERVICE_SECRET: z.string().default('default_internal_secret_for_dev'),
+  LOW_BALANCE_THRESHOLD: z.coerce.number().default(5000),
+  NEGATIVE_GRACE_CREDITS: z.coerce.number().default(2000),
 });
 
 const clientSchema = z.object({
@@ -27,6 +30,9 @@ const processEnv = {
   RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
   RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
   RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
+  INTERNAL_SERVICE_SECRET: process.env.INTERNAL_SERVICE_SECRET,
+  LOW_BALANCE_THRESHOLD: process.env.LOW_BALANCE_THRESHOLD,
+  NEGATIVE_GRACE_CREDITS: process.env.NEGATIVE_GRACE_CREDITS,
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
   NEXT_PUBLIC_RAZORPAY_KEY_ID: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,

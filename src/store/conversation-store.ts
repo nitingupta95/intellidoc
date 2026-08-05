@@ -31,6 +31,12 @@ interface ConversationState {
   isGenerating: boolean;
   isLoading: boolean;
   
+  // Wallet state
+  showCreditModal: boolean;
+  creditErrorData: { balance: number; required: number } | null;
+  walletBalance: number | null;
+  isBYOK: boolean;
+  
   // Actions
   loadConversations: (workspaceId: string) => Promise<void>;
   createConversation: (title: string, workspaceId: string, knowledgeBaseId?: string, documentId?: string) => Promise<string>;
@@ -39,6 +45,9 @@ interface ConversationState {
   sendMessage: (content: string, workspaceId: string, knowledgeBaseId?: string, documentId?: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   renameConversation: (id: string, title: string) => Promise<void>;
+  
+  setShowCreditModal: (show: boolean, data?: any) => void;
+  fetchWalletBalance: () => Promise<void>;
   
   // Internals for streaming
   setGenerating: (generating: boolean) => void;
@@ -57,6 +66,25 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   messages: [],
   isGenerating: false,
   isLoading: false,
+  
+  showCreditModal: false,
+  creditErrorData: null,
+  walletBalance: null,
+  isBYOK: false,
+
+  setShowCreditModal: (show, data) => set({ showCreditModal: show, creditErrorData: data || null }),
+
+  fetchWalletBalance: async () => {
+    try {
+      const res = await fetch('/api/wallet');
+      if (res.ok) {
+        const data = await res.json();
+        set({ isBYOK: data.isBYOK, walletBalance: data.balance ?? null });
+      }
+    } catch (e) {
+      console.error('Failed to fetch wallet', e);
+    }
+  },
 
   loadConversations: async (workspaceId: string) => {
     try {
@@ -202,6 +230,16 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         body: JSON.stringify({ message: content }),
       });
 
+      if (res.status === 402) {
+        const errorData = await res.json().catch(() => ({}));
+        get().setShowCreditModal(true, errorData);
+        // Remove the optimistic assistant and user messages
+        set((state) => ({
+          messages: state.messages.filter(m => m.id !== userMsgId && m.id !== astMsgId)
+        }));
+        return;
+      }
+
       if (!res.body) throw new Error('No response body');
 
       // Check if conversation title changed
@@ -294,6 +332,18 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pendingId, consent }),
       });
+
+      if (res.status === 402) {
+        const errorData = await res.json().catch(() => ({}));
+        get().setShowCreditModal(true, errorData);
+        // Revert optimistic state
+        set((state) => ({
+          messages: state.messages.map(msg => 
+            msg.id === lastMsg.id ? { ...msg, confirmationResolved: false, isStreaming: false } : msg
+          )
+        }));
+        return;
+      }
 
       if (res.status === 410) {
         get().appendStreamToLastMessage("\n\nThis confirmation expired — please ask your question again.");
