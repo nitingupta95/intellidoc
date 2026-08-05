@@ -313,7 +313,8 @@ async def handle_chat_resolve(
             ctx.workspace_id, redis_client, bg_tasks, x_openai_api_key, x_gemini_api_key,
             user_id=user_id, uses_system_key=uses_system_key, model=model,
             extra_prompt_tokens=int(extra_prompt_tokens),
-            extra_completion_tokens=int(extra_completion_tokens)
+            extra_completion_tokens=int(extra_completion_tokens),
+            did_web_search=True
         ), media_type="text/event-stream")
 
     else:

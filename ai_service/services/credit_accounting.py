@@ -11,6 +11,7 @@ CREDIT_RATES = {
     "gemini-2.0-flash": {"input": 1, "output": 3},
     "whisper-1": {"perMinute": 6},
     "embedding-default": {"input": 1},
+    "web-search": {"perRequest": 7},
 }
 
 def estimate_prompt_tokens(model: str, messages: List[Any], context_chunks: List[str]) -> int:
