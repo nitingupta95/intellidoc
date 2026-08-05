@@ -19,11 +19,7 @@ export function TokenMeter({ lifetimeGranted, lifetimeSpent }: TokenMeterProps) 
         <span className="text-muted-foreground">
           {lifetimeSpent.toLocaleString()} / {lifetimeGranted.toLocaleString()} Credits
         </span>
-      </div>
-      <Progress value={percentage} className="h-3" />
-      <p className="text-xs text-muted-foreground text-right mt-1">
-        {percentage.toFixed(1)}% of lifetime granted credits used
-      </p>
+       </div>
     </div>
   );
 }
