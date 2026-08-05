@@ -33,26 +33,26 @@ export function DocumentTable({
   router,
 }: DocumentTableProps) {
   return (
-    <div className="hidden md:block glass-panel overflow-hidden border border-border/50">
-      <table className="w-full text-left text-sm table-fixed">
+    <div className="hidden md:block glass-panel overflow-x-auto border border-border/50">
+      <table className="w-full text-left text-sm table-fixed min-w-[1000px]">
         <colgroup>
-          <col className="w-[32%]" />
-          <col className="w-[8%]" />
+          <col className="w-[28%]" />
           <col className="w-[10%]" />
+          <col className="w-[10%]" />
+          <col className="w-[15%]" />
           <col className="w-[12%]" />
           <col className="w-[10%]" />
-          <col className="w-[12%]" />
-          <col className="w-[16%]" />
+          <col className="w-[15%]" />
         </colgroup>
         <thead className="bg-background/40 border-b border-border/50">
           <tr>
-            <th className="px-6 py-4 font-medium text-muted-foreground">Name</th>
-            <th className="px-6 py-4 font-medium text-muted-foreground">Type</th>
-            <th className="px-6 py-4 font-medium text-muted-foreground">Size</th>
-            <th className="px-6 py-4 font-medium text-muted-foreground">Uploaded By</th>
-            <th className="px-6 py-4 font-medium text-muted-foreground">Status</th>
-            <th className="px-6 py-4 font-medium text-muted-foreground">Uploaded</th>
-            <th className="px-6 py-4 font-medium text-muted-foreground text-right">Actions</th>
+            <th className="px-4 py-3 font-medium text-muted-foreground">Name</th>
+            <th className="px-4 py-3 font-medium text-muted-foreground">Type</th>
+            <th className="px-4 py-3 font-medium text-muted-foreground">Size</th>
+            <th className="px-4 py-3 font-medium text-muted-foreground">Uploaded By</th>
+            <th className="px-4 py-3 font-medium text-muted-foreground">Status</th>
+            <th className="px-4 py-3 font-medium text-muted-foreground">Uploaded</th>
+            <th className="px-4 py-3 font-medium text-muted-foreground text-right">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border/50">
@@ -62,7 +62,7 @@ export function DocumentTable({
               className="hover:bg-background/30 transition-colors group cursor-pointer" 
               onClick={() => setCurrentFolderId(folder.id)}
             >
-              <td className="px-6 py-4">
+              <td className="px-4 py-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500 shrink-0">
                     <FolderIcon size={16} />
@@ -70,12 +70,12 @@ export function DocumentTable({
                   <span className="font-medium group-hover:text-primary transition-colors truncate">{folder.name}</span>
                 </div>
               </td>
-              <td className="px-6 py-4 text-muted-foreground">Folder</td>
-              <td className="px-6 py-4 text-muted-foreground">-</td>
-              <td className="px-6 py-4 text-muted-foreground">-</td>
-              <td className="px-6 py-4">-</td>
-              <td className="px-6 py-4 text-muted-foreground">{new Date(folder.createdAt).toLocaleDateString()}</td>
-              <td className="px-6 py-4 text-right"></td>
+              <td className="px-4 py-3 text-muted-foreground">Folder</td>
+              <td className="px-4 py-3 text-muted-foreground">-</td>
+              <td className="px-4 py-3 text-muted-foreground">-</td>
+              <td className="px-4 py-3">-</td>
+              <td className="px-4 py-3 text-muted-foreground">{new Date(folder.createdAt).toLocaleDateString()}</td>
+              <td className="px-4 py-3 text-right"></td>
             </tr>
           ))}
           {displayedDocuments.map((doc, i) => (
@@ -84,7 +84,7 @@ export function DocumentTable({
               className="hover:bg-background/50 hover:text-foreground transition-colors group cursor-pointer"
               onClick={() => router.push(`/documents/${doc.id}`)}
             >
-              <td className="px-6 py-4">
+              <td className="px-4 py-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
                     <FileText size={16} />
@@ -99,10 +99,10 @@ export function DocumentTable({
                   </Link>
                 </div>
               </td>
-              <td className="px-6 py-4 text-muted-foreground group-hover:text-foreground transition-colors truncate">{formatMimeType(doc.mimeType)}</td>
-              <td className="px-6 py-4 text-muted-foreground group-hover:text-foreground transition-colors truncate">{(doc.fileSize / 1024 / 1024).toFixed(2)} MB</td>
-              <td className="px-6 py-4 text-muted-foreground group-hover:text-foreground transition-colors truncate">{doc.user?.name || "Unknown"}</td>
-              <td className="px-6 py-4">
+              <td className="px-4 py-3 text-muted-foreground group-hover:text-foreground transition-colors truncate">{formatMimeType(doc.mimeType)}</td>
+              <td className="px-4 py-3 text-muted-foreground group-hover:text-foreground transition-colors truncate">{(doc.fileSize / 1024 / 1024).toFixed(2)} MB</td>
+              <td className="px-4 py-3 text-muted-foreground group-hover:text-foreground transition-colors truncate">{doc.user?.name || "Unknown"}</td>
+              <td className="px-4 py-3">
                 <div className="flex items-center gap-2 group-hover:opacity-90">
                   {doc.status === 'INDEXED' ? (
                     <>
@@ -119,8 +119,8 @@ export function DocumentTable({
                   )}
                 </div>
               </td>
-              <td className="px-6 py-4 text-muted-foreground group-hover:text-foreground transition-colors">{new Date(doc.createdAt).toLocaleDateString()}</td>
-              <td className="px-6 py-4 text-right">
+              <td className="px-4 py-3 text-muted-foreground group-hover:text-foreground transition-colors whitespace-nowrap">{new Date(doc.createdAt).toLocaleDateString()}</td>
+              <td className="px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-2 transition-opacity">
                   <Button 
                     onClick={(e) => {

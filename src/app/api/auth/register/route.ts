@@ -27,6 +27,19 @@ export async function POST(req: Request) {
         name,
         email,
         password: hashedPassword,
+        creditWallet: {
+          create: {
+            balance: 200,
+            lifetimeGranted: 200,
+            transactions: {
+              create: {
+                type: 'SIGNUP_GRANT',
+                amount: 200,
+                balanceAfter: 200
+              }
+            }
+          }
+        }
       },
     });
 

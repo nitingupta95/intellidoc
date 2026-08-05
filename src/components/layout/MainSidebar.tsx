@@ -60,7 +60,7 @@ export function MainSidebar() {
           </div>
         )}
         
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-6 w-full">
           <WorkspaceSwitcher isOpen={isOpen} />
           {isOpen && <ThemeToggle />}
         </div>

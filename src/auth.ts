@@ -105,6 +105,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: "/login",
     newUser: "/register",
   },
+  events: {
+    async createUser({ user }) {
+      if (user.id) {
+        await db.creditWallet.create({
+          data: {
+            userId: user.id,
+            balance: 200,
+            lifetimeGranted: 200,
+            transactions: {
+              create: {
+                type: 'SIGNUP_GRANT',
+                amount: 200,
+                balanceAfter: 200
+              }
+            }
+          }
+        });
+      }
+    }
+  },
   callbacks: {
     async session({ session, token }) {
       if (token.sub && session.user) {

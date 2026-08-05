@@ -28,7 +28,7 @@ export function WorkspaceSwitcher({ isOpen = true, isMobile = false }: Workspace
 
   if (!isOpen && !isMobile) {
     return (
-      <div className="w-full flex justify-center mb-6">
+      <div className="w-full flex justify-center">
         <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
           <Building2 size={18} />
         </div>
@@ -82,17 +82,17 @@ export function WorkspaceSwitcher({ isOpen = true, isMobile = false }: Workspace
   }
 
   return (
-    <div className="mb-6 w-full" data-tour="workspace-selector">
+    <div className="flex-1 min-w-0" data-tour="workspace-selector">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button 
             variant="outline" 
-            className="w-full justify-between border-border/50 bg-background/50 glass-panel"
+            className="w-full justify-between border-border/50 bg-background/50 glass-panel min-w-0"
             disabled={isLoading}
           >
-            <div className="flex items-center gap-2 truncate">
+            <div className="flex items-center gap-2 truncate min-w-0">
               <Building2 size={16} className="text-primary shrink-0" />
-              <span className="truncate">
+              <span className="truncate min-w-0">
                 {isLoading ? "Loading..." : activeWorkspace?.name || "Select Workspace"}
               </span>
             </div>

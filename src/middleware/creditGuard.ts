@@ -8,16 +8,28 @@ export async function creditGuard(userId: string, isBYOK: boolean) {
     return null;
   }
 
-  const wallet = await db.creditWallet.findUnique({
+  let wallet = await db.creditWallet.findUnique({
     where: { userId },
     select: { balance: true }
   });
 
   if (!wallet) {
-    return NextResponse.json(
-      { error: "insufficient_credits", balance: 0, required: 1 },
-      { status: 402 }
-    );
+    // Automatically provision a wallet for legacy users who don't have one
+    wallet = await db.creditWallet.create({
+      data: {
+        userId,
+        balance: 200,
+        lifetimeGranted: 200,
+        transactions: {
+          create: {
+            type: 'SIGNUP_GRANT',
+            amount: 200,
+            balanceAfter: 200
+          }
+        }
+      },
+      select: { balance: true }
+    });
   }
 
   // Quick short-circuit block if hard limit is breached
