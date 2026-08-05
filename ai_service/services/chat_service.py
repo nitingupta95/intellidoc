@@ -35,16 +35,20 @@ async def log_analytics_event(event_type: str, data: dict):
     logger.info(f"Logged analytics event: {event_type}")
 
 
-async def debit_wallet_task(user_id: str, uses_system_key: bool, model: str, question: str, context_docs: List[str], answer: str, history: List[dict], extra_prompt_tokens: int = 0, extra_completion_tokens: int = 0, did_web_search: bool = False):
+async def debit_wallet_task(user_id: str, uses_system_key: bool, model: str, question: str, context_docs: List[str], answer: str, history: List[dict], extra_prompt_tokens: int = 0, extra_completion_tokens: int = 0, did_web_search: bool = False, actual_usage: dict = None):
     if not uses_system_key or not user_id:
         return
 
-    # Estimate prompt
-    messages = history + [{"role": "user", "content": question}]
-    prompt_tokens = estimate_prompt_tokens(model, messages, context_docs) + extra_prompt_tokens
-    
-    # Estimate completion
-    completion_tokens = estimate_prompt_tokens(model, [{"content": answer}], []) + extra_completion_tokens
+    if actual_usage:
+        prompt_tokens = actual_usage.get("input_tokens", 0) + extra_prompt_tokens
+        completion_tokens = actual_usage.get("output_tokens", 0) + extra_completion_tokens
+    else:
+        # Estimate prompt
+        messages = history + [{"role": "user", "content": question}]
+        prompt_tokens = estimate_prompt_tokens(model, messages, context_docs) + extra_prompt_tokens
+        
+        # Estimate completion
+        completion_tokens = estimate_prompt_tokens(model, [{"content": answer}], []) + extra_completion_tokens
     
     cost = credits_for_usage(model, prompt_tokens, completion_tokens)
     
@@ -122,6 +126,8 @@ async def _stream_final_answer(
         yield synthesis_event
 
     full_answer = ""
+    actual_usage = None
+    
     async for chunk in rag_chain.stream_answer(
         question,
         context_docs,
@@ -130,6 +136,10 @@ async def _stream_final_answer(
         gemini_api_key=x_gemini_api_key,
         conservative=conservative
     ):
+        if isinstance(chunk, dict) and "usage_metadata" in chunk:
+            actual_usage = chunk["usage_metadata"]
+            continue
+
         if first_token_time is None:
             first_token_time = time.perf_counter() - t_llm_start
 
@@ -165,7 +175,7 @@ async def _stream_final_answer(
 
         bg_tasks.add_task(save_chat_to_db, chat_id, question, full_answer, workspace_id)
         bg_tasks.add_task(log_analytics_event, "chat_query", metrics)
-        bg_tasks.add_task(debit_wallet_task, user_id, uses_system_key, model, question, context_docs, full_answer, history, extra_prompt_tokens, extra_completion_tokens, did_web_search)
+        bg_tasks.add_task(debit_wallet_task, user_id, uses_system_key, model, question, context_docs, full_answer, history, extra_prompt_tokens, extra_completion_tokens, did_web_search, actual_usage)
 
         if history:
             bg_tasks.add_task(compress_history_task, chat_id, history, redis_client, x_openai_api_key, x_gemini_api_key)

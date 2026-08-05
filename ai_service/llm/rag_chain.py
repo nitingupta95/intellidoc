@@ -24,7 +24,8 @@ class RAGChain:
             llm = ChatOpenAI(
                 model="gpt-4o", 
                 temperature=0,
-                openai_api_key=openai_api_key
+                openai_api_key=openai_api_key,
+                stream_usage=True
             )
         elif gemini_api_key:
             llm = ChatGoogleGenerativeAI(
@@ -38,11 +39,12 @@ class RAGChain:
             llm = ChatOpenAI(
                 model="gpt-4o", 
                 temperature=0,
-                openai_api_key=key
+                openai_api_key=key,
+                stream_usage=True
             )
             
         active_prompt = self.conservative_prompt if conservative else self.prompt
-        return active_prompt | llm | StrOutputParser()
+        return active_prompt | llm
 
     async def stream_answer(self, question: str, retrieved_docs: list[str], history: list[dict] = None, openai_api_key: str = None, gemini_api_key: str = None, conservative: bool = False):
         """
@@ -61,7 +63,11 @@ class RAGChain:
 
         chain = self._get_chain(openai_api_key, gemini_api_key, conservative)
         async for chunk in chain.astream({"context": context_str, "history": lc_history, "question": question}):
-            yield chunk
+            if chunk.content:
+                yield chunk.content
+                
+            if hasattr(chunk, 'usage_metadata') and chunk.usage_metadata:
+                yield {"usage_metadata": chunk.usage_metadata}
 
     async def generate_summary_and_questions(self, text: str, openai_api_key: str = None, gemini_api_key: str = None):
         """
