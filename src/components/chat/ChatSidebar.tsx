@@ -117,7 +117,7 @@ export function ChatSidebar({ className }: { className?: string }) {
           <span className="text-muted-foreground text-xs">
             You have {walletBalance} credits remaining.
           </span>
-          <Link href="/settings" className="text-primary hover:underline text-xs font-medium">
+          <Link href="/billing" className="text-primary hover:underline text-xs font-medium">
             Refill now &rarr;
           </Link>
         </div>
