@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     S3_ENDPOINT: str = "http://minio:9000"
 
     AI_SERVICE_URL: str = "http://localhost:8000"
+    APP_URL: str = "http://localhost:3000"
+    INTERNAL_SERVICE_SECRET: str = "default_internal_secret_for_dev"
+    GEMINI_API_KEY: str = ""
+    LOW_BALANCE_THRESHOLD: int = 5000
+    NEGATIVE_GRACE_CREDITS: int = 2000
 
     # ── CRAG + Tavily ─────────────────────────────────────────────────────────
     TAVILY_API_KEY: str = ""

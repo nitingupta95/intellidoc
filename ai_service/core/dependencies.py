@@ -4,6 +4,7 @@ import httpx
 from fastapi import Request, HTTPException
 from services.credit_accounting import estimate_prompt_tokens, credits_for_usage
 from retrieval.qdrant_client import QdrantVectorStore
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +55,8 @@ async def require_sufficient_credits(request: Request):
     prompt_tokens = estimate_prompt_tokens(model, messages, [])
     estimated_cost = credits_for_usage(model, prompt_tokens, 50) # Assume 50 completion tokens for estimation
     
-    app_url = os.environ.get("APP_URL", "http://localhost:3000")
-    secret = os.environ.get("INTERNAL_SERVICE_SECRET", "default_internal_secret_for_dev")
+    app_url = settings.APP_URL
+    secret = settings.INTERNAL_SERVICE_SECRET
     
     async with httpx.AsyncClient() as client:
         try:
@@ -64,16 +65,23 @@ async def require_sufficient_credits(request: Request):
                 headers={"Authorization": f"Bearer {secret}"},
                 timeout=5.0
             )
-            if resp.status_code != 200:
-                raise HTTPException(status_code=402, detail={"error": "insufficient_credits", "balance": 0, "required": estimated_cost})
+            if resp.status_code == 401 or resp.status_code == 403:
+                logger.error("Unauthorized access to internal wallet API. Check INTERNAL_SERVICE_SECRET.")
+                raise HTTPException(status_code=500, detail="AI Service configuration error")
+            elif resp.status_code == 404:
+                raise HTTPException(status_code=404, detail="Wallet not found")
+            elif resp.status_code != 200:
+                logger.error(f"Failed to fetch wallet balance: {resp.status_code} {resp.text}")
+                raise HTTPException(status_code=500, detail="Failed to verify credit balance")
             
             data = resp.json()
             balance = data.get("balance", 0)
-        except httpx.RequestError:
+        except httpx.RequestError as e:
+            logger.error(f"Failed to reach internal wallet API: {e}")
             # If we can't reach the internal service, assume balance check fails closed
             raise HTTPException(status_code=500, detail="Failed to verify credit balance")
 
-    grace = int(os.environ.get("NEGATIVE_GRACE_CREDITS", 2000))
+    grace = settings.NEGATIVE_GRACE_CREDITS
     if balance + grace < estimated_cost:
         raise HTTPException(status_code=402, detail={"error": "insufficient_credits", "balance": balance, "required": estimated_cost})
         

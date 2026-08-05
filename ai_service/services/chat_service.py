@@ -8,6 +8,7 @@ from typing import List, Optional
 from fastapi import BackgroundTasks
 from llm.rag_chain import RAGChain
 from services.credit_accounting import estimate_prompt_tokens, credits_for_usage, CREDIT_RATES
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +53,8 @@ async def debit_wallet_task(user_id: str, uses_system_key: bool, model: str, que
     if cost <= 0:
         return
         
-    app_url = os.environ.get("APP_URL", "http://localhost:3000")
-    secret = os.environ.get("INTERNAL_SERVICE_SECRET", "default_internal_secret_for_dev")
+    app_url = settings.APP_URL
+    secret = settings.INTERNAL_SERVICE_SECRET
     
     async with httpx.AsyncClient() as client:
         try:
