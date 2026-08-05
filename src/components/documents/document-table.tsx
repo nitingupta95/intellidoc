@@ -135,9 +135,6 @@ export function DocumentTable({
                     <span>Chat</span>
                   </Button>
                   <div className="flex items-center transition-opacity text-muted-foreground/50 hover:text-muted-foreground">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-inherit">
-                      <MoreVertical size={16} />
-                    </Button>
                     <Button 
                       onClick={() => setDocumentToDelete(doc.id)}
                       variant="ghost" 
