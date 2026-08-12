@@ -18,7 +18,7 @@ export function BottomNav() {
 
   const navItems = [
     { href: "/dashboard", icon: <LayoutDashboard size={24} />, label: "Home" },
-    { href: "/analytics", icon: <BarChart size={24} />, label: "Stats" },
+    // { href: "/analytics", icon: <BarChart size={24} />, label: "Stats" },
     { href: "/documents", icon: <Files size={24} />, label: "Files" },
     { href: "/knowledge-bases", icon: <Database size={24} />, label: "KBs" },
     { href: "/chat", icon: <MessageSquare size={24} />, label: "Chat" },

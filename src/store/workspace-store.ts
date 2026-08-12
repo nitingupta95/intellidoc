@@ -36,7 +36,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       // If no active workspace is selected and we have workspaces, select the first one
       const { activeWorkspaceId } = get();
       if (!activeWorkspaceId && workspaces.length > 0) {
-        set({ activeWorkspaceId: workspaces[0].id });
+          set({ activeWorkspaceId: workspaces[0].id });
       }
     } catch (e) {
       console.error('Failed to load workspaces', e);

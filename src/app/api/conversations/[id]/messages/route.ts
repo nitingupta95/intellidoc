@@ -198,15 +198,15 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         where: { knowledgeBaseId: conversation.knowledgeBaseId },
         select: { id: true, summary: true }
       });
-      documentIds = docs.map(d => d.id);
-      docs.forEach(d => { if (d.summary) documentSummaries[d.id] = d.summary; });
+      documentIds = docs.map((d: { id: string; summary: string | null }) => d.id);
+      docs.forEach((d: { id: string; summary: string | null }) => { if (d.summary) documentSummaries[d.id] = d.summary; });
     } else {
       const docs = await db.document.findMany({
         where: { workspaceId: conversation.workspaceId },
         select: { id: true, summary: true }
       });
-      documentIds = docs.map(d => d.id);
-      docs.forEach(d => { if (d.summary) documentSummaries[d.id] = d.summary; });
+      documentIds = docs.map((d: { id: string; summary: string | null }) => d.id);
+      docs.forEach((d: { id: string; summary: string | null }) => { if (d.summary) documentSummaries[d.id] = d.summary; });
     }
 
     // Proxy stream to FastAPI

@@ -9,7 +9,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: '*',
       allow: ['/', '/api/og/*'],
-      // Cross-reference Phase 0 Audit: Disallowing protected routes and non-marketing auth routes.
+ 
       disallow: [
         '/api/',
         '/dashboard/',

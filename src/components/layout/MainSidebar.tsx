@@ -67,7 +67,7 @@ export function MainSidebar() {
         
         <nav className="space-y-2 flex-1">
           <NavItem href="/dashboard" icon={<LayoutDashboard size={20} />} label="Dashboard" active={pathname === "/dashboard"} isOpen={isOpen} />
-          <NavItem href="/analytics" icon={<BarChart size={20} />} label="Analytics" active={pathname === "/analytics"} isOpen={isOpen} />
+          {/* <NavItem href="/analytics" icon={<BarChart size={20} />} label="Analytics" active={pathname === "/analytics"} isOpen={isOpen} /> */}
           <NavItem href="/knowledge-bases" icon={<Database size={20} />} label="Knowledge Bases" active={pathname === "/knowledge-bases"} isOpen={isOpen} dataTour="nav-kb" />
           <NavItem href="/documents" icon={<Files size={20} />} label="Documents" active={pathname === "/documents"} isOpen={isOpen} dataTour="nav-docs" />
           <NavItem href="/chat" icon={<MessageSquare size={20} />} label="AI Chat" active={pathname.startsWith("/chat")} isOpen={isOpen} dataTour="nav-chat" />

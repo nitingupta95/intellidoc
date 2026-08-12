@@ -46,7 +46,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* STAT CARDS ROW */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard
           title="Total Documents"
           value={totalDocuments.toString()}
@@ -61,13 +61,13 @@ export default async function DashboardPage() {
           icon={<MessageSquare size={18} className="text-purple-500 dark:text-purple-400" />}
           iconBg="bg-purple-500/10"
         />
-        <StatCard
+        {/* <StatCard
           title="Avg Confidence"
           value={avgConfidence > 0 ? `${avgConfidence.toFixed(1)}%` : "N/A"}
           change="+0%"
           icon={<Zap size={18} className="text-amber-500 dark:text-amber-400" />}
           iconBg="bg-amber-500/10"
-        />
+        /> */}
         <StatCard
           title="Time Saved"
           value={`${timeSavedHours} hrs`}

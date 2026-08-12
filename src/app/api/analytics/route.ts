@@ -37,7 +37,7 @@ export async function GET(req: Request) {
     });
 
     const totalDocuments = docs.length;
-    const totalStorageBytes = docs.reduce((acc, doc) => acc + (doc.fileSize || 0), 0);
+    const totalStorageBytes = docs.reduce((acc: number, doc: { fileSize: number | null; createdAt: Date }) => acc + (doc.fileSize || 0), 0);
     const storageGB = (totalStorageBytes / (1024 * 1024 * 1024)).toFixed(2);
 
     // 2. Active Users (Users who have sent a message in this workspace in the last 30 days)
