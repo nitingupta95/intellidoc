@@ -16,6 +16,46 @@ parser = DocumentParser()
 chunker = SemanticChunker()
 embedding_svc = EmbeddingService()
 
+
+async def _delete_existing_chunks(document_id: str):
+    """
+    Deletes all Chunk records for a document before reprocessing.
+
+    This is the idempotency guard for the document pipeline. If the worker
+    crashed partway through a previous run, RabbitMQ will redeliver the
+    message and the pipeline will restart from scratch. Without this step,
+    every retry appends MORE chunk rows to PostgreSQL, creating duplicates.
+
+    The Qdrant upsert is already idempotent (same vector IDs overwrite).
+    This function makes the PostgreSQL side equally safe.
+
+    Non-fatal: if this call fails (e.g. Next.js is briefly unavailable),
+    we log a warning and proceed anyway. Duplicate chunks are ugly but not
+    catastrophic, whereas blocking the pipeline on a cleanup failure is worse.
+    """
+    try:
+        frontend_url = settings.ALLOWED_ORIGIN.rstrip("/")
+        url = f"{frontend_url}/api/documents/{document_id}/chunks"
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.delete(
+                url,
+                headers={"X-Internal-Secret": settings.INTERNAL_SERVICE_SECRET},
+            )
+            if response.status_code not in (200, 204, 404):
+                logger.warning(
+                    "Chunk cleanup returned unexpected status %s for document %s — proceeding anyway",
+                    response.status_code,
+                    document_id,
+                )
+            else:
+                logger.info("Chunk cleanup complete for document %s", document_id)
+    except Exception as e:
+        logger.warning(
+            "Chunk cleanup failed for document %s: %s — proceeding anyway",
+            document_id,
+            e,
+        )
+
 async def update_document_status(document_id: str, data: dict):
     try:
         frontend_url = settings.ALLOWED_ORIGIN.rstrip("/")
@@ -36,7 +76,22 @@ async def process_document_pipeline(
     gemini_api_key: str = None
 ):
     try:
-        from services.chat_service import rag_chain # Local import to avoid circular dep if needed
+        from services.chat_service import rag_chain  # Local import to avoid circular dep
+
+        # ── IDEMPOTENCY GUARD ─────────────────────────────────────────────────────
+        # If this is a retry (the worker crashed during a previous attempt),
+        # clean up any partial state before starting fresh.
+        # - Deletes old Chunk rows in PostgreSQL so we don't accumulate duplicates
+        # - Resets document status so the UI doesn't show a stale progress %
+        await update_document_status(document_id, {
+            "status": "PROCESSING",
+            "currentStep": "Preparing (cleaning up previous attempt if any)",
+            "progress": 5,
+            "errorMessage": None,   # clear stale error from a previous crash
+        })
+        await _delete_existing_chunks(document_id)
+        # ── END IDEMPOTENCY GUARD ─────────────────────────────────────────────────
+
         await update_document_status(document_id, {"status": "PROCESSING", "currentStep": "Downloading from MinIO", "progress": 10})
         logger.info(f"Downloading {file_path} from MinIO...")
         

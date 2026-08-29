@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
+import { encryptApiKey, safeDecryptApiKey } from '@/lib/crypto';
 
 // GET the masked API keys
 export async function GET() {
@@ -19,8 +20,9 @@ export async function GET() {
       return NextResponse.json({ error: 'User not found in database. Please log out and log in again.' }, { status: 404 });
     }
 
-    const openaiKey = user?.openaiKey;
-    const geminiKey = user?.geminiKey;
+    // Decrypt stored keys before masking (handles both encrypted and legacy plaintext keys)
+    const openaiKey = safeDecryptApiKey(user?.openaiKey);
+    const geminiKey = safeDecryptApiKey(user?.geminiKey);
 
     const maskedOpenAI = openaiKey 
       ? (openaiKey.length > 8 ? `sk-...${openaiKey.slice(-4)}` : 'sk-...****') 
@@ -58,14 +60,16 @@ export async function POST(req: Request) {
       if (openaiKey && (typeof openaiKey !== 'string' || !openaiKey.startsWith('sk-'))) {
         return NextResponse.json({ error: 'Invalid OpenAI API key format' }, { status: 400 });
       }
-      dataToUpdate.openaiKey = openaiKey || null;
+      // Encrypt before storing — never write plaintext API keys to the database
+      dataToUpdate.openaiKey = openaiKey ? encryptApiKey(openaiKey) : null;
     }
 
     if (geminiKey !== undefined) {
       if (geminiKey && typeof geminiKey !== 'string') {
         return NextResponse.json({ error: 'Invalid Gemini API key format' }, { status: 400 });
       }
-      dataToUpdate.geminiKey = geminiKey || null;
+      // Encrypt before storing — never write plaintext API keys to the database
+      dataToUpdate.geminiKey = geminiKey ? encryptApiKey(geminiKey) : null;
     }
 
     try {

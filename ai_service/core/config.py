@@ -19,7 +19,12 @@ class Settings(BaseSettings):
 
     AI_SERVICE_URL: str = "http://localhost:8000"
     APP_URL: str = "http://localhost:3000"
-    INTERNAL_SERVICE_SECRET: str = "default_internal_secret_for_dev"
+    # Shared secret between Next.js gateway and this service.
+    # MUST be set explicitly in every environment — no default is provided
+    # so that a misconfigured deployment fails loudly at startup rather than
+    # running with an insecure placeholder.
+    # Generate: openssl rand -hex 32
+    INTERNAL_SERVICE_SECRET: str
     GEMINI_API_KEY: str = ""
     LOW_BALANCE_THRESHOLD: int = 5000
     NEGATIVE_GRACE_CREDITS: int = 2000
