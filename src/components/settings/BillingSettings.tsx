@@ -29,11 +29,24 @@ export function BillingSettings() {
     fetchWallet();
   }, []);
 
-  const { handleCreditPurchase, loading: checkoutLoading } = useRazorpayCheckout({
+  const [loadingPackId, setLoadingPackId] = useState<string | null>(null);
+
+  const { handleCreditPurchase } = useRazorpayCheckout({
     onSuccess: () => {
       fetchWallet();
-    }
+      setLoadingPackId(null);
+    },
+    onFailure: () => {
+      setLoadingPackId(null);
+    },
   });
+
+  const handleBuy = async (packId: string) => {
+    setLoadingPackId(packId);
+    await handleCreditPurchase(packId);
+    // onSuccess/onFailure above clear the state; this is a safety fallback
+    setLoadingPackId(null);
+  };
 
   if (loading) {
     return (
@@ -105,12 +118,14 @@ export function BillingSettings() {
                 </div>
               </CardContent>
               <CardFooter>
-                <Button 
-                  className="w-full" 
-                  disabled={checkoutLoading} 
-                  onClick={() => handleCreditPurchase(pack.id)}
+                <Button
+                  className="w-full"
+                  disabled={loadingPackId === pack.id}
+                  onClick={() => handleBuy(pack.id)}
                 >
-                  {checkoutLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  {loadingPackId === pack.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
                   Buy Now
                 </Button>
               </CardFooter>
