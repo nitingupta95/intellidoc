@@ -17,7 +17,6 @@ const serverSchema = z.object({
 const clientSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),
   NEXT_PUBLIC_API_URL: z.string().url().default('http://localhost:8000/api/v1'),
-  NEXT_PUBLIC_RAZORPAY_KEY_ID: z.string().optional(),
   NEXT_PUBLIC_SITE_URL: z.string().url({ message: "NEXT_PUBLIC_SITE_URL must be a valid URL and cannot be missing or fallback silently." }),
 });
 
@@ -34,8 +33,7 @@ const processEnv = {
   LOW_BALANCE_THRESHOLD: process.env.LOW_BALANCE_THRESHOLD,
   NEGATIVE_GRACE_CREDITS: process.env.NEGATIVE_GRACE_CREDITS,
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
-  NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-  NEXT_PUBLIC_RAZORPAY_KEY_ID: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+  NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL, 
   NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
 };
 

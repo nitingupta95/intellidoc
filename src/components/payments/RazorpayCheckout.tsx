@@ -58,7 +58,7 @@ export function useRazorpayCheckout(options?: UseRazorpayCheckoutOptions) {
 
         // 3. Open Razorpay Checkout
         const rzpOptions = {
-          key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+          key: orderData.keyId,
           amount: orderData.amount,
           currency: orderData.currency,
           name: "IntelliDoc AI",
@@ -156,7 +156,7 @@ export function useRazorpayCheckout(options?: UseRazorpayCheckoutOptions) {
         }
 
         const rzpOptions = {
-          key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+          key: orderData.keyId,
           amount: orderData.amount,
           currency: orderData.currency,
           name: "IntelliDoc AI",

@@ -214,6 +214,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-Internal-Secret': process.env.INTERNAL_SERVICE_SECRET || '',
         'X-OpenAI-API-Key': userOpenAIKey,
         'X-Gemini-API-Key': userGeminiKey,
         'X-Uses-System-Key': isBYOK ? 'false' : 'true',

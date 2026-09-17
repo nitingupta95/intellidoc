@@ -14,14 +14,25 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const wallet = await db.creditWallet.findUnique({
+    // Upsert ensures that users created via OAuth or before the wallet feature 
+    // was introduced automatically get a wallet with a default balance.
+    const wallet = await db.creditWallet.upsert({
       where: { userId: params.userId },
+      update: {}, // Do nothing if it exists
+      create: {
+        userId: params.userId,
+        balance: 1000,
+        lifetimeGranted: 1000,
+        transactions: {
+          create: {
+            type: 'SIGNUP_GRANT',
+            amount: 1000,
+            balanceAfter: 1000
+          }
+        }
+      },
       select: { balance: true }
     });
-
-    if (!wallet) {
-      return NextResponse.json({ error: "Wallet not found" }, { status: 404 });
-    }
 
     return NextResponse.json({ balance: wallet.balance });
   } catch (error) {

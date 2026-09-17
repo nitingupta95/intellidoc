@@ -136,7 +136,7 @@ export function DocumentTable({
                   </Button>
                   <div className="flex items-center transition-opacity text-muted-foreground/50 hover:text-muted-foreground">
                     <Button 
-                      onClick={() => setDocumentToDelete(doc.id)}
+                      onClick={(e) => { e.stopPropagation(); setDocumentToDelete(doc.id); }}
                       variant="ghost" 
                       size="icon" 
                       className="h-8 w-8 text-destructive hover:bg-destructive/10"

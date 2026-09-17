@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
         orderId: order.id,
         amount: amountInPaise,
         currency: "INR",
-        keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        keyId: process.env.RAZORPAY_KEY_ID,
         purpose: "credits",
         packId,
       });
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
       orderId: order.id,
       amount: PLANS[plan].price,
       currency: "INR",
-      keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+      keyId: process.env.RAZORPAY_KEY_ID,
       plan,
     });
   } catch (error) {
