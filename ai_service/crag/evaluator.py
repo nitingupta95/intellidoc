@@ -64,7 +64,12 @@ def _get_llm(openai_api_key: str = None, gemini_api_key: str = None):
         return ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
     if gemini_api_key:
         return ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, google_api_key=gemini_api_key)
-    return ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=settings.OPENAI_API_KEY)
+    # System-level fallback: try OpenAI env key, then Gemini env key
+    if settings.OPENAI_API_KEY:
+        return ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=settings.OPENAI_API_KEY)
+    if settings.GEMINI_API_KEY:
+        return ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, google_api_key=settings.GEMINI_API_KEY)
+    raise ValueError("No LLM API key available for CRAG evaluation")
 
 
 def _parse_json_safe(raw: str) -> dict:

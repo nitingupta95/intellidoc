@@ -5,6 +5,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class EmbeddingService:
     def __init__(self):
         # We will keep text-embedding-3-small as primary fallback if available
@@ -37,10 +38,50 @@ class EmbeddingService:
             
         raise ValueError("No valid API key provided for embeddings")
 
+    def _get_gemini_fallback(self, gemini_api_key: str = None):
+        """Build a Gemini embedding instance for fallback."""
+        key = gemini_api_key or settings.GEMINI_API_KEY
+        if not key:
+            return None
+        return GoogleGenerativeAIEmbeddings(
+            model="models/embedding-001",
+            google_api_key=key
+        )
+
+    def _is_openai_quota_error(self, exc: Exception) -> bool:
+        """Return True if the exception is an OpenAI 429 / credit-exhausted error."""
+        exc_str = str(exc).lower()
+        return (
+            "429" in exc_str
+            or "insufficient_quota" in exc_str
+            or "credit_balance_exhausted" in exc_str
+            or "rate_limit" in exc_str
+        )
+
     def embed_documents(self, texts: list[str], openai_api_key: str = None, gemini_api_key: str = None) -> tuple[list[list[float]], str, int]:
         emb, provider, dim = self.get_embeddings_and_provider(openai_api_key, gemini_api_key)
-        return emb.embed_documents(texts), provider, dim
+        try:
+            return emb.embed_documents(texts), provider, dim
+        except Exception as exc:
+            if provider == "openai" and self._is_openai_quota_error(exc):
+                fallback = self._get_gemini_fallback(gemini_api_key)
+                if fallback:
+                    logger.warning(
+                        "OpenAI embedding failed (quota exhausted) — falling back to Gemini"
+                    )
+                    return fallback.embed_documents(texts), "gemini", 768
+            raise
         
     def embed_query(self, text: str, openai_api_key: str = None, gemini_api_key: str = None) -> tuple[list[float], str, int]:
         emb, provider, dim = self.get_embeddings_and_provider(openai_api_key, gemini_api_key)
-        return emb.embed_query(text), provider, dim
+        try:
+            return emb.embed_query(text), provider, dim
+        except Exception as exc:
+            if provider == "openai" and self._is_openai_quota_error(exc):
+                fallback = self._get_gemini_fallback(gemini_api_key)
+                if fallback:
+                    logger.warning(
+                        "OpenAI embedding failed (quota exhausted) — falling back to Gemini"
+                    )
+                    return fallback.embed_query(text), "gemini", 768
+            raise

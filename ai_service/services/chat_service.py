@@ -35,7 +35,20 @@ async def log_analytics_event(event_type: str, data: dict):
     logger.info(f"Logged analytics event: {event_type}")
 
 
-async def debit_wallet_task(user_id: str, uses_system_key: bool, model: str, question: str, context_docs: List[str], answer: str, history: List[dict], extra_prompt_tokens: int = 0, extra_completion_tokens: int = 0, did_web_search: bool = False, actual_usage: dict = None):
+async def debit_wallet_task(
+    user_id: str,
+    uses_system_key: bool,
+    model: str,
+    question: str,
+    context_docs: List[str],
+    answer: str,
+    history: List[dict],
+    extra_prompt_tokens: int = 0,
+    extra_completion_tokens: int = 0,
+    did_web_search: bool = False,
+    actual_usage: dict = None,
+    cost_multiplier: float = 1.0,   # >1.0 for multi-hop KB queries
+):
     if not uses_system_key or not user_id:
         return
 
@@ -46,12 +59,16 @@ async def debit_wallet_task(user_id: str, uses_system_key: bool, model: str, que
         # Estimate prompt
         messages = history + [{"role": "user", "content": question}]
         prompt_tokens = estimate_prompt_tokens(model, messages, context_docs) + extra_prompt_tokens
-        
+
         # Estimate completion
         completion_tokens = estimate_prompt_tokens(model, [{"content": answer}], []) + extra_completion_tokens
-    
+
     cost = credits_for_usage(model, prompt_tokens, completion_tokens)
-    
+
+    # Apply multiplier for multi-hop KB queries (extra LLM judge calls + embed rounds)
+    if cost_multiplier != 1.0:
+        cost = round(cost * cost_multiplier)
+
     if did_web_search:
         cost += CREDIT_RATES.get("web-search", {}).get("perRequest", 10)
     if cost <= 0:
@@ -99,17 +116,26 @@ async def _stream_final_answer(
     extra_prompt_tokens: int = 0,
     extra_completion_tokens: int = 0,
     did_web_search: bool = False,
+    # ── Multi-hop additions ────────────────────────────────────────────────────
+    chunks_by_doc: Optional[dict] = None,   # {docLabel: [text]} from multi-hop path
+    hop_trace: Optional[list] = None,       # list of HopResult dicts for SSE event
+    partial: bool = False,                  # True when maxHops hit without done=True
+    cost_multiplier: float = 1.0,           # >1.0 for multi-hop KB queries
 ):
     """
     Streams the final RAG answer back to the client.
 
     synthesized=True:
       Emits a "synthesis_mode" SSE event before the answer tokens so the
-      frontend can render the SynthesisBadge on this message. This is a
-      distinct signal from the hallucination-warning badge — it means the
-      answer was composed by combining multiple document sections, not that
-      it may contain fabricated content.
+      frontend can render the SynthesisBadge on this message.
+
+    partial=True (multi-hop only):
+      Signals that the hop loop exited because maxHops was reached, not because
+      the judge returned done=True.  Emits partial:true in the synthesis_mode
+      SSE payload so the frontend can surface "may be incomplete", and prepends
+      a PARTIAL_RETRIEVAL marker in the prompt context so the model warns the user.
     """
+
     t_llm_start = time.perf_counter()
     first_token_time = None
 
@@ -117,25 +143,49 @@ async def _stream_final_answer(
     citations_event = f"data: {{\"event\": \"citations\", \"data\": {json.dumps(citations)}}}\n\n"
     yield citations_event
 
-    # Phase 3: emit synthesis_mode event so the frontend can badge this answer
+    # Phase 3: emit synthesis_mode event so the frontend can badge this answer.
+    # For multi-doc sessions: include partial flag and a doc-aware reason string.
     if synthesized:
-        synthesis_event = (
-            "data: {\"event\": \"synthesis_mode\", \"data\": "
-            "{\"reason\": \"Answer synthesized from multiple sections of your document.\"}}\n\n"
-        )
-        yield synthesis_event
+        if chunks_by_doc:
+            syn_reason = "Answer synthesized from multiple documents."
+        else:
+            syn_reason = "Answer synthesized from multiple sections of your document."
+        synthesis_payload = json.dumps({
+            "reason": syn_reason,
+            "multi_doc": bool(chunks_by_doc),
+            "partial": partial,
+        })
+        yield f"data: {{\"event\": \"synthesis_mode\", \"data\": {synthesis_payload}}}\n\n"
+
+    # Multi-hop: emit the hop trace so callers can inspect the query chain
+    if hop_trace:
+        yield f"data: {{\"event\": \"multi_hop_trace\", \"data\": {json.dumps(hop_trace)}}}\n\n"
 
     full_answer = ""
     actual_usage = None
-    
-    async for chunk in rag_chain.stream_answer(
-        question,
-        context_docs,
-        history,
-        openai_api_key=x_openai_api_key,
-        gemini_api_key=x_gemini_api_key,
-        conservative=conservative
-    ):
+
+    # Route to multi-doc synthesiser when we have doc-grouped context (multi-hop path),
+    # otherwise fall back to the existing flat-join stream.
+    if chunks_by_doc:
+        stream_gen = rag_chain.stream_answer_multi_doc(
+            question,
+            chunks_by_doc,
+            history,
+            openai_api_key=x_openai_api_key,
+            gemini_api_key=x_gemini_api_key,
+            partial=partial,
+        )
+    else:
+        stream_gen = rag_chain.stream_answer(
+            question,
+            context_docs,
+            history,
+            openai_api_key=x_openai_api_key,
+            gemini_api_key=x_gemini_api_key,
+            conservative=conservative,
+        )
+
+    async for chunk in stream_gen:
         if isinstance(chunk, dict) and "usage_metadata" in chunk:
             actual_usage = chunk["usage_metadata"]
             continue
@@ -175,7 +225,7 @@ async def _stream_final_answer(
 
         bg_tasks.add_task(save_chat_to_db, chat_id, question, full_answer, workspace_id)
         bg_tasks.add_task(log_analytics_event, "chat_query", metrics)
-        bg_tasks.add_task(debit_wallet_task, user_id, uses_system_key, model, question, context_docs, full_answer, history, extra_prompt_tokens, extra_completion_tokens, did_web_search, actual_usage)
+        bg_tasks.add_task(debit_wallet_task, user_id, uses_system_key, model, question, context_docs, full_answer, history, extra_prompt_tokens, extra_completion_tokens, did_web_search, actual_usage, cost_multiplier)
 
         if history:
             bg_tasks.add_task(compress_history_task, chat_id, history, redis_client, x_openai_api_key, x_gemini_api_key)

@@ -79,6 +79,56 @@ class Settings(BaseSettings):
     CRAG_UPPER_THRESHOLD: float = 0.55   # was 0.7
     CRAG_LOWER_THRESHOLD: float = 0.25   # was 0.3
 
+    # ── Multi-hop retrieval (feat/mult-hop-retrival) ───────────────────────────
+    # When True, the query route runs an iterative hop loop instead of a single
+    # vector search.  Each hop asks the LLM "can you fully answer the original
+    # question with what we have so far?"; if not, it extracts a *specific*
+    # missing entity/fact and uses that as the next search query.
+    #
+    # Set ENABLE_MULTI_HOP=false to preserve old single-shot behaviour without
+    # any code changes.
+    ENABLE_MULTI_HOP: bool = True
+
+    # Hard cap on the number of retrieval hops (hop 1 = existing retrieval).
+    # Increasing this beyond 3 is rarely useful and adds latency.
+    MULTI_HOP_MAX_HOPS: int = 3
+
+    # Hard wall-clock latency budget for the entire hop loop (seconds).
+    # If the loop exceeds this, it cuts off immediately and returns best-available
+    # chunks with done_reason="latencyBudget" (partial=True in the response).
+    # Set to 0 to disable the budget check.
+    MULTI_HOP_LATENCY_BUDGET_S: float = 8.0
+
+    # Credit cost multiplier applied to knowledge_base queries that reach hop 2+.
+    # Reflects the extra LLM judge calls and retrieval work.  2.5 = 2.5x normal cost.
+    # Set to 1.0 to disable the multiplier.
+    MULTI_HOP_COST_MULTIPLIER: float = 2.5
+
+    # Redis TTL (seconds) for per-hop retrieval caches.
+    # Key = docSetId:sha256(subQuery).  Repeat cross-doc queries against the
+    # same KB hit this cache instead of re-running Qdrant + embedding.
+    MULTI_HOP_HOP_CACHE_TTL: int = 3600  # 1 hour
+
+    # ── Retrieval floor / diversity (per-doc floor + MMR) ─────────────────────
+    # Minimum number of chunks guaranteed from each document in the active
+    # KB / document_ids scope.  After the global top-k search, any doc not
+    # represented in the result set gets a small targeted search (top-N) so
+    # every document has at least RETRIEVAL_PER_DOC_FLOOR chunks.
+    # Set to 0 to disable the floor-fill pass.
+    RETRIEVAL_PER_DOC_FLOOR: int = 2
+
+    # Hard ceiling on total chunks after the floor-fill merge.  Keeps token
+    # cost predictable regardless of how many docs are in scope.
+    RETRIEVAL_TOTAL_CAP: int = 15
+
+    # MMR lambda: 0.0 = pure diversity, 1.0 = pure similarity.
+    # 0.7 keeps top results accurate while penalising same-doc redundancy.
+    RETRIEVAL_MMR_LAMBDA: float = 0.7
+
+    # When True, logs a structured DEBUG line per query that lists which
+    # doc_ids appear in the final chunk set (doc_coverage_log event).
+    RETRIEVAL_DEBUG: bool = True
+
     class Config:
         env_file = ".env"
         extra = "ignore"

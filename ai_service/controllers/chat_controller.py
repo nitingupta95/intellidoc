@@ -12,6 +12,7 @@ from schemas.chat import ChatRequest, ResolveRequest
 from services.chat_service import _stream_final_answer
 from embeddings.embedding_service import EmbeddingService
 from retrieval.reranker import reranker
+from retrieval.multi_hop import run_multi_hop
 from core.dependencies import get_vector_store
 from core.config import settings
 from crag.models import EvalVerdict, PendingCRAGContext, Answerability
@@ -22,6 +23,48 @@ from crag import pending_store as crag_pending_store
 
 logger = logging.getLogger(__name__)
 embedding_svc = EmbeddingService()
+
+
+def _should_run_multi_hop(request: "ChatRequest") -> tuple[bool, str]:
+    """
+    Determine whether the multi-hop retrieval loop should run for this request.
+
+    Rules (applied in order):
+      1. Global kill-switch: ENABLE_MULTI_HOP=False → never hop.
+      2. context_type == "single_doc" → never hop (user is chatting with one document).
+      3. context_type == "knowledge_base" and only 1 document in scope → never hop
+         (treat as single_doc even though the route is a KB conversation).
+      4. context_type == "knowledge_base" with 2+ documents in scope → hop.
+      5. context_type is None (legacy client): infer from document_ids length.
+         - 1 or fewer document_ids → no hop.
+         - 2+ document_ids → hop.
+
+    Returns (should_hop: bool, reason: str) for logging.
+    """
+    # Rule 1: global kill-switch
+    if not settings.ENABLE_MULTI_HOP:
+        return False, "kill-switch ENABLE_MULTI_HOP=False"
+
+    n_docs = len(request.document_ids) if request.document_ids else 0
+    ctx = request.context_type  # "single_doc" | "knowledge_base" | None
+
+    # Rule 2: explicit single_doc declaration
+    if ctx == "single_doc":
+        return False, "context_type=single_doc"
+
+    # Rule 3: KB declared but only 1 doc resolved
+    if ctx == "knowledge_base" and n_docs <= 1:
+        return False, f"context_type=knowledge_base but only {n_docs} doc(s) in scope"
+
+    # Rule 4: KB with 2+ docs
+    if ctx == "knowledge_base" and n_docs >= 2:
+        return True, f"context_type=knowledge_base with {n_docs} docs"
+
+    # Rule 5: legacy client — infer from document_ids
+    if n_docs >= 2:
+        return True, f"inferred multi-doc from {n_docs} document_ids (no context_type)"
+
+    return False, f"inferred single-doc from {n_docs} document_ids (no context_type)"
 
 
 async def handle_chat_query(
@@ -119,12 +162,19 @@ async def handle_chat_query(
                 query_text=request.query,
                 team_id=request.team_id,
                 department=request.department,
-                project=request.project
+                project=request.project,
+                per_doc_floor=settings.RETRIEVAL_PER_DOC_FLOOR,
+                total_cap=settings.RETRIEVAL_TOTAL_CAP,
             )
-            print(f"DEBUG: vs.search returned {len(search_results)} results for document_ids={request.document_ids} workspace_id={request.workspace_id}")
+            logger.info(
+                "RETRIEVAL single-shot: returned %d chunks | doc_ids_scope=%s | workspace=%s",
+                len(search_results), request.document_ids, request.workspace_id,
+            )
             if search_results:
-                search_results = reranker.rerank(request.query, search_results, top_k=5)
-                print(f"DEBUG: after rerank {len(search_results)}")
+                search_results = reranker.rerank(
+                    request.query, search_results, top_k=settings.RETRIEVAL_TOTAL_CAP
+                )
+                logger.info("RETRIEVAL after MMR rerank: %d chunks", len(search_results))
 
         retrieved_docs = []
         citations = []
@@ -146,7 +196,6 @@ async def handle_chat_query(
 
         if is_summary_request:
             # Bypass CRAG completely for whole-document structural summaries
-            # If the text is massive, we might want to batch, but for now we rely on the large context window.
             context_to_use = [" ".join(retrieved_docs)]
             logger.info(f"Bypassing CRAG for summary. Total context length: {len(context_to_use[0])} chars.")
             return StreamingResponse(
@@ -160,6 +209,120 @@ async def handle_chat_query(
                 media_type="text/event-stream"
             )
 
+        # ── Routing: decide whether to run the multi-hop loop ─────────────────
+        # This replaces the old ENABLE_MULTI_HOP global flag gate.
+        # Never hop on summary requests — they need all chunks anyway.
+        should_hop, hop_reason = _should_run_multi_hop(request)
+        if is_summary_request:
+            should_hop = False
+            hop_reason = "summary request"
+        logger.info("ROUTING: multi_hop=%s reason=%r", should_hop, hop_reason)
+
+        if should_hop:
+            logger.info("MULTI_HOP enabled — starting iterative hop loop for query=%r", request.query)
+            mh_result = await run_multi_hop(
+                request.query,
+                vector_store=vs,
+                embedding_svc=embedding_svc,
+                reranker=reranker,
+                workspace_id=request.workspace_id,
+                knowledge_base_id=request.knowledge_base_id,
+                document_ids=request.document_ids,
+                team_id=request.team_id,
+                department=request.department,
+                project=request.project,
+                openai_api_key=x_openai_api_key,
+                gemini_api_key=x_gemini_api_key,
+                max_hops=settings.MULTI_HOP_MAX_HOPS,
+                redis_client=redis_client,
+                latency_budget_s=settings.MULTI_HOP_LATENCY_BUDGET_S,
+            )
+
+            # Build hop trace for SSE event (serialisable summary)
+            hop_trace = [
+                {
+                    "hop": h.hop_number,
+                    "query": h.query_used,
+                    "chunks_retrieved": len(h.chunks),
+                    "crag_verdict": h.crag_verdict,
+                    "crag_blended_score": round(h.crag_blended_score, 4),
+                    "crag_reasoning": h.crag_reasoning[:120],
+                }
+                for h in mh_result.hops
+            ]
+            logger.info("MULTI_HOP trace: %s", hop_trace)
+
+            citations = mh_result.all_chunks
+            retrieved_docs = [c.get("full_text", "") for c in citations]
+
+            # Run a final holistic CRAG evaluation on the full accumulated set
+            eval_result = await crag_evaluator.evaluate_documents(
+                request.query, citations, x_openai_api_key, x_gemini_api_key
+            )
+
+            # CORRECT / SYNTHESIZABLE — stream with multi-doc synthesis prompt
+            if eval_result.verdict in (EvalVerdict.CORRECT, EvalVerdict.AMBIGUOUS):
+                # partial=True when the loop was cut off before judge returned done=True
+                # (maxHops, latencyBudget, or noNewChunks are all best-effort exits)
+                _PARTIAL_REASONS = {"maxHops", "latencyBudget", "noNewChunks"}
+                is_partial = mh_result.done_reason in _PARTIAL_REASONS
+
+                # For multi-hop paths the CRAG refiner produces a flat merged string
+                # which re-defeats the per-doc grouping.  Skip the refiner and let
+                # stream_answer_multi_doc format from chunks_by_doc directly.
+                final_citations = eval_result.good_docs if eval_result.good_docs else citations
+                return StreamingResponse(
+                    _stream_final_answer(
+                        request.query, retrieved_docs, final_citations, request.history, chat_id,
+                        request.workspace_id, redis_client, bg_tasks, x_openai_api_key, x_gemini_api_key,
+                        full_resp_key, t0, t_embed, t_search,
+                        synthesized=True,
+                        user_id=user_id, uses_system_key=uses_system_key, model=model,
+                        chunks_by_doc=mh_result.chunks_by_doc,
+                        hop_trace=hop_trace,
+                        partial=is_partial,
+                        cost_multiplier=settings.MULTI_HOP_COST_MULTIPLIER,
+                    ),
+                    media_type="text/event-stream"
+                )
+
+
+            # INCORRECT — fall through to the existing confirm/web-search flow
+            # (same logic as single-shot path below)
+            pending_id = str(uuid.uuid4())
+            ctx = PendingCRAGContext(
+                pending_id=pending_id,
+                query=request.query,
+                verdict=eval_result.verdict,
+                good_docs=eval_result.good_docs if eval_result.good_docs else citations,
+                workspace_id=request.workspace_id,
+                knowledge_base_id=request.knowledge_base_id,
+                document_ids=request.document_ids,
+                history=request.history or [],
+                created_at=time.time(),
+                answerability=eval_result.answerability,
+                document_summaries=request.document_summaries,
+            )
+            await crag_pending_store.save_pending_context(redis_client, ctx)
+
+            async def mh_needs_confirm_gen():
+                yield (
+                    f"data: {{\"event\": \"multi_hop_trace\", \"data\": {json.dumps(hop_trace)}}}\n\n"
+                )
+                yield (
+                    f"data: {{\"event\": \"needs_confirmation\", \"data\": {{"
+                    f"\"pending_id\": \"{pending_id}\", "
+                    f"\"verdict\": \"{eval_result.verdict.value}\", "
+                    f"\"reason\": \"{eval_result.reason}\", "
+                    f"\"good_docs_count\": {len(citations)}, "
+                    f"\"answerability\": \"{eval_result.answerability.value}\""
+                    f"}}}}\n\n"
+                )
+                yield "data: [DONE]\n\n"
+
+            return StreamingResponse(mh_needs_confirm_gen(), media_type="text/event-stream")
+
+        # ── Single-shot path (single_doc or KB with 1 doc) ────────────────────
         eval_result = await crag_evaluator.evaluate_documents(
             request.query, citations, x_openai_api_key, x_gemini_api_key
         )

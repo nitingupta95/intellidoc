@@ -185,9 +185,14 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     // Fetch document IDs to restrict search and their summaries for web-search sanity check
     let documentIds: string[] = [];
     const documentSummaries: Record<string, string> = {};
+    // context_type is the authoritative chat-mode signal sent to the AI service.
+    // single_doc  = user is chatting with exactly one document.
+    // knowledge_base = user is chatting across a KB or their whole workspace.
+    let contextType: 'single_doc' | 'knowledge_base';
 
     if (metadata.documentId) {
       documentIds = [metadata.documentId];
+      contextType = 'single_doc';
       const doc = await db.document.findUnique({
         where: { id: metadata.documentId },
         select: { id: true, summary: true }
@@ -200,6 +205,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       });
       documentIds = docs.map((d: { id: string; summary: string | null }) => d.id);
       docs.forEach((d: { id: string; summary: string | null }) => { if (d.summary) documentSummaries[d.id] = d.summary; });
+      contextType = 'knowledge_base';
     } else {
       const docs = await db.document.findMany({
         where: { workspaceId: conversation.workspaceId },
@@ -207,6 +213,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       });
       documentIds = docs.map((d: { id: string; summary: string | null }) => d.id);
       docs.forEach((d: { id: string; summary: string | null }) => { if (d.summary) documentSummaries[d.id] = d.summary; });
+      contextType = 'knowledge_base';
     }
 
     // Proxy stream to FastAPI
@@ -227,8 +234,10 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         document_ids: documentIds,
         history: formattedHistory,
         document_summaries: Object.keys(documentSummaries).length > 0 ? documentSummaries : null,
+        context_type: contextType,
       }),
     });
+
 
     if (!response.ok) {
       const errorText = await response.text();

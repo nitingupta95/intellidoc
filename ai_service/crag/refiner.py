@@ -30,13 +30,20 @@ def _get_filter_chain(openai_api_key: str = None, gemini_api_key: str = None):
             temperature=0,
             google_api_key=gemini_api_key
         )
-    else:
-        # Fallback
+    elif settings.OPENAI_API_KEY:
         llm = ChatOpenAI(
             model="gpt-4o-mini", 
             temperature=0,
             openai_api_key=settings.OPENAI_API_KEY
         )
+    elif settings.GEMINI_API_KEY:
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-1.5-flash",
+            temperature=0,
+            google_api_key=settings.GEMINI_API_KEY
+        )
+    else:
+        raise ValueError("No LLM API key available for CRAG refiner")
     return filter_prompt | llm.with_structured_output(KeepOrDrop)
 
 def decompose_to_sentences(text: str) -> List[str]:

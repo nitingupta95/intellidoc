@@ -36,7 +36,7 @@ services:
 
   # MinIO (Object Storage)
   minio:
-    image: minio/minio
+    image: elestio/minio:latest
     ports:
       - "9010:9000"
       - "9011:9001"

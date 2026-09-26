@@ -1,9 +1,19 @@
+import logging
+
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
 from core.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+def _is_openai_quota_error(exc: Exception) -> bool:
+    """Return True if the exception is an OpenAI 429 / credit-exhausted error."""
+    s = str(exc).lower()
+    return "429" in s or "insufficient_quota" in s or "credit_balance_exhausted" in s
 
 class RAGChain:
     def __init__(self):
@@ -19,36 +29,93 @@ class RAGChain:
             ("human", "{question}")
         ])
 
-    def _get_chain(self, openai_api_key: str = None, gemini_api_key: str = None, conservative: bool = False):
+        # ── Multi-hop / multi-doc synthesis prompt ───────────────────────────
+        # Context arrives pre-grouped by source document so the model can draw
+        # distinct facts from each doc without silently over-weighting one source.
+        # Each section is introduced with a document label so the model can
+        # inline-cite every factual claim precisely.
+        self.multi_doc_prompt = ChatPromptTemplate.from_messages([
+            ("system",
+             "You are IntelliDoc AI, an expert document intelligence assistant.\n"
+             "The context below was retrieved across MULTIPLE documents using "
+             "multi-hop retrieval. Each section is clearly labelled with its source document name.\n\n"
+             "STRICT RULES — follow every one of these:\n"
+             "1. Draw facts from ALL labelled document sections. "
+             "Do NOT favour the first section or whichever section appears longest.\n"
+             "2. You MUST inline-cite the source document by name for EVERY individual factual "
+             "claim you make. Format: \"[Document: <name>]\". Do not batch citations at the end — "
+             "cite inline, immediately after the fact.\n"
+             "3. If facts from different documents conflict, state BOTH versions with their "
+             "source names and explicitly flag the discrepancy.\n"
+             "4. If information needed to fully answer the question is absent from all sections, "
+             "say so explicitly. Do not guess or hallucinate missing data.\n"
+             "5. Format your response in rich Markdown: bold text, bullet points, and clear "
+             "section headings where appropriate.\n"
+             "6. If the context is prefixed with [PARTIAL_RETRIEVAL], prepend a ⚠️ callout: "
+             "\"**Note:** This answer may be incomplete — not all relevant documents were searched.\"\n\n"
+             "Context (grouped by source document):\n{context}"),
+            MessagesPlaceholder(variable_name="history"),
+            ("human", "{question}"),
+        ])
+
+
+
+    def _get_llm(self, openai_api_key: str = None, gemini_api_key: str = None):
+        """Return the streaming LLM instance (shared by all chain variants).
+        
+        When an OpenAI key is provided, we try OpenAI first.  But if the key is
+        credit-exhausted (429), the *calling* code may catch the error; here we
+        simply return the best available LLM.  For eager fallback at query time,
+        see _get_llm_with_fallback().
+        """
         if openai_api_key:
-            llm = ChatOpenAI(
-                model="gpt-4o", 
+            return ChatOpenAI(
+                model="gpt-4o",
                 temperature=0,
                 openai_api_key=openai_api_key,
-                stream_usage=True
+                stream_usage=True,
             )
-        elif gemini_api_key:
-            llm = ChatGoogleGenerativeAI(
+        if gemini_api_key:
+            return ChatGoogleGenerativeAI(
                 model="gemini-1.5-pro",
                 temperature=0,
-                google_api_key=gemini_api_key
+                google_api_key=gemini_api_key,
             )
-        else:
-            # Fallback
-            key = settings.OPENAI_API_KEY
-            llm = ChatOpenAI(
-                model="gpt-4o", 
+        # System-level fallback: prefer Gemini if OpenAI env key is empty/missing
+        if settings.OPENAI_API_KEY:
+            return ChatOpenAI(
+                model="gpt-4o",
                 temperature=0,
-                openai_api_key=key,
-                stream_usage=True
+                openai_api_key=settings.OPENAI_API_KEY,
+                stream_usage=True,
             )
-            
+        if settings.GEMINI_API_KEY:
+            return ChatGoogleGenerativeAI(
+                model="gemini-1.5-pro",
+                temperature=0,
+                google_api_key=settings.GEMINI_API_KEY,
+            )
+        raise ValueError("No LLM API key available (neither OpenAI nor Gemini)")
+
+    def _get_fallback_llm(self, gemini_api_key: str = None):
+        """Return a Gemini LLM for use when OpenAI is quota-exhausted."""
+        key = gemini_api_key or settings.GEMINI_API_KEY
+        if key:
+            return ChatGoogleGenerativeAI(
+                model="gemini-1.5-pro",
+                temperature=0,
+                google_api_key=key,
+            )
+        return None
+
+    def _get_chain(self, openai_api_key: str = None, gemini_api_key: str = None, conservative: bool = False):
+        llm = self._get_llm(openai_api_key, gemini_api_key)
         active_prompt = self.conservative_prompt if conservative else self.prompt
         return active_prompt | llm
 
     async def stream_answer(self, question: str, retrieved_docs: list[str], history: list[dict] = None, openai_api_key: str = None, gemini_api_key: str = None, conservative: bool = False):
         """
-        Streams the response back.
+        Streams the response back.  Auto-falls-back to Gemini on OpenAI quota errors.
         """
         context_str = "\n\n---\n\n".join(retrieved_docs)
         
@@ -61,12 +128,112 @@ class RAGChain:
                 elif msg.get("role") == "assistant":
                     lc_history.append(AIMessage(content=msg.get("content", "")))
 
-        chain = self._get_chain(openai_api_key, gemini_api_key, conservative)
-        async for chunk in chain.astream({"context": context_str, "history": lc_history, "question": question}):
+        invoke_args = {"context": context_str, "history": lc_history, "question": question}
+        active_prompt = self.conservative_prompt if conservative else self.prompt
+
+        # Try primary LLM
+        llm = self._get_llm(openai_api_key, gemini_api_key)
+        chain = active_prompt | llm
+        try:
+            async for chunk in chain.astream(invoke_args):
+                if chunk.content:
+                    yield chunk.content
+                if hasattr(chunk, 'usage_metadata') and chunk.usage_metadata:
+                    yield {"usage_metadata": chunk.usage_metadata}
+            return  # success — done
+        except Exception as exc:
+            if not _is_openai_quota_error(exc):
+                raise
+
+        # Fallback to Gemini
+        fallback = self._get_fallback_llm(gemini_api_key)
+        if not fallback:
+            raise ValueError("OpenAI credits exhausted and no Gemini API key available for fallback")
+        logger.warning("OpenAI LLM quota exhausted — falling back to Gemini for answer generation")
+        chain = active_prompt | fallback
+        async for chunk in chain.astream(invoke_args):
             if chunk.content:
                 yield chunk.content
-                
             if hasattr(chunk, 'usage_metadata') and chunk.usage_metadata:
+                yield {"usage_metadata": chunk.usage_metadata}
+
+    async def stream_answer_multi_doc(
+        self,
+        question: str,
+        chunks_by_doc: dict,          # {docLabel: [chunk_text, ...]}
+        history: list[dict] = None,
+        openai_api_key: str = None,
+        gemini_api_key: str = None,
+        partial: bool = False,        # True when maxHops was hit without done=True
+    ):
+        """
+        Multi-hop / multi-doc synthesis variant.
+
+        Formats context with explicit per-document headers so the model treats
+        each source equally instead of silently favouring the first flat block.
+
+        When partial=True the context block is prefixed with a PARTIAL_RETRIEVAL
+        marker that the prompt's Rule 6 turns into a visible ⚠️ warning.
+
+        Format fed to the prompt:
+            ════════════════════════════════
+            From Document: <label>
+            ════════════════════════════════
+            <chunk1>
+
+            <chunk2>
+
+            ════════════════════════════════
+            From Document: <label2>
+            ...
+        """
+        DIVIDER = "═" * 48
+        sections = []
+        for doc_label, texts in chunks_by_doc.items():
+            header = f"{DIVIDER}\nFrom Document: {doc_label}\n{DIVIDER}"
+            body = "\n\n".join(t for t in texts if t.strip())
+            sections.append(f"{header}\n{body}")
+        context_str = "\n\n".join(sections)
+
+        # Prepend PARTIAL marker so Rule 6 fires inside the model
+        if partial:
+            context_str = "[PARTIAL_RETRIEVAL — maxHops reached, answer may be incomplete]\n\n" + context_str
+
+        # Convert history
+        lc_history = []
+        if history:
+            for msg in history:
+                if msg.get("role") == "user":
+                    lc_history.append(HumanMessage(content=msg.get("content", "")))
+                elif msg.get("role") == "assistant":
+                    lc_history.append(AIMessage(content=msg.get("content", "")))
+
+        invoke_args = {"context": context_str, "history": lc_history, "question": question}
+
+        # Try primary LLM
+        llm = self._get_llm(openai_api_key, gemini_api_key)
+        chain = self.multi_doc_prompt | llm
+        try:
+            async for chunk in chain.astream(invoke_args):
+                if chunk.content:
+                    yield chunk.content
+                if hasattr(chunk, "usage_metadata") and chunk.usage_metadata:
+                    yield {"usage_metadata": chunk.usage_metadata}
+            return  # success — done
+        except Exception as exc:
+            if not _is_openai_quota_error(exc):
+                raise
+
+        # Fallback to Gemini
+        fallback = self._get_fallback_llm(gemini_api_key)
+        if not fallback:
+            raise ValueError("OpenAI credits exhausted and no Gemini API key available for fallback")
+        logger.warning("OpenAI LLM quota exhausted — falling back to Gemini for multi-doc synthesis")
+        chain = self.multi_doc_prompt | fallback
+        async for chunk in chain.astream(invoke_args):
+            if chunk.content:
+                yield chunk.content
+            if hasattr(chunk, "usage_metadata") and chunk.usage_metadata:
                 yield {"usage_metadata": chunk.usage_metadata}
 
     async def generate_summary_and_questions(self, text: str, openai_api_key: str = None, gemini_api_key: str = None):
