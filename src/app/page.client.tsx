@@ -22,6 +22,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HeroPreview } from "@/components/home/hero-preview";
 
 import dynamic from "next/dynamic";
 
@@ -36,17 +37,17 @@ export default function Home() {
 
   const coreFeatures = [
     {
-      icon: <Search className="w-5 h-5 text-gray-700 dark:text-gray-50" />,
+      icon: <Search className="w-5 h-5 text-primary" aria-hidden />,
       title: "Semantic Search",
       description: "Find meaning across millions of tokens, powered by advanced vector embeddings and cross-encoder re-ranking.",
     },
     {
-      icon: <BrainCircuit className="w-5 h-5 text-gray-700 dark:text-gray-50" />,
+      icon: <BrainCircuit className="w-5 h-5 text-primary" aria-hidden />,
       title: "Citation-Backed AI",
       description: "Receive verifiable answers with pinpoint source citations and confidence scores. Powered by Gemini or GPT-4o.",
     },
     {
-      icon: <Users className="w-5 h-5 text-gray-700 dark:text-gray-50" />,
+      icon: <Users className="w-5 h-5 text-primary" aria-hidden />,
       title: "Team Workspaces",
       description: "Collaborate seamlessly. Invite members, assign Owner/Admin/Member roles, and share knowledge bases securely.",
     },
@@ -127,7 +128,7 @@ export default function Home() {
       <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-black/[0.03] dark:bg-white/[0.03] rounded-full blur-[120px] pointer-events-none z-0" />
 
       {/* Top Nav */}
-      <header className="fixed top-0 left-0 right-0 z-50 px-6 py-6 border-b border-black/5 dark:border-white/5 bg-gray-50/50 dark:bg-[#050505]/50 backdrop-blur-md">
+      <header className="fixed top-0 left-0 right-0 z-50 px-6 py-4 border-b border-black/5 dark:border-white/5 bg-gray-50/90 dark:bg-[#050505]/90 backdrop-blur-md">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-black/5 dark:bg-white/10 flex items-center justify-center border border-black/10 dark:border-white/10">
@@ -139,7 +140,7 @@ export default function Home() {
             <Link href="/login" className="text-gray-500 hover:text-gray-900 dark:text-gray-50 dark:hover:text-white transition-colors hidden sm:block">
               Sign In
             </Link>
-            <Button asChild variant="secondary" size="sm" className="bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90 rounded-full px-4 h-8 text-xs font-medium cursor-pointer">
+            <Button asChild variant="outline" size="sm">
               <Link href="/register">Get Started</Link>
             </Button>
           </nav>
@@ -147,7 +148,7 @@ export default function Home() {
       </header>
 
       {/* Main Hero Content */}
-      <main className="relative z-10 max-w-5xl mx-auto px-6 pt-48 pb-32 flex flex-col items-center justify-center text-center">
+      <main className="relative z-10 max-w-5xl mx-auto px-6 pt-36 pb-32 flex flex-col items-center justify-center text-center">
 
         <section className="flex flex-col items-center justify-center w-full">
 
@@ -169,16 +170,20 @@ export default function Home() {
 
         {/* CTAs */}
         <div className="flex flex-col sm:flex-row items-center gap-4 mt-10 animate-in fade-in slide-in-from-bottom-6 duration-1000 fill-mode-both delay-300">
-          <Button asChild size="lg" className="bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90 rounded-full px-8 h-12 text-sm font-medium shadow-[0_0_20px_rgba(0,0,0,0.1)] dark:shadow-[0_0_20px_rgba(255,255,255,0.1)] cursor-pointer">
-            <Link href="/login">
+          <Button asChild size="xl">
+            <Link href="/register">
               Get Started
             </Link>
           </Button>
-          <Button asChild variant="outline" size="lg" className="bg-transparent border-black/10 hover:bg-black/5 text-gray-900 dark:border-white/10 dark:hover:bg-white/5 dark:text-white rounded-full px-8 h-12 text-sm font-medium cursor-pointer">
+          <Button asChild variant="outline" size="xl">
             <Link href="/dashboard">
               View Dashboard <ArrowRight className="ml-2 w-4 h-4" />
             </Link>
           </Button>
+        </div>
+
+        <div className="mt-16 w-full flex justify-center">
+          <HeroPreview />
         </div>
 
         </section>
@@ -207,9 +212,9 @@ export default function Home() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-100px" }}
               transition={{ duration: 0.8, delay: idx * 0.1, ease: [0.16, 1, 0.3, 1] }}
-              className="group bg-white dark:bg-white/[0.02] border border-black/5 dark:border-white/5 rounded-2xl p-8 hover:bg-gray-50 hover:border-black/10 dark:hover:bg-white/[0.04] dark:hover:border-white/10 transition-all duration-500 ease-out hover:-translate-y-1 shadow-md shadow-black/5 dark:shadow-lg dark:shadow-black/50 cursor-pointer"
+              className="group bg-white dark:bg-white/[0.02] border border-black/5 dark:border-white/5 rounded-2xl p-8 hover:bg-gray-50 hover:border-black/10 dark:hover:bg-white/[0.04] dark:hover:border-white/10 transition-all duration-200 ease-out hover:-translate-y-1 shadow-md shadow-black/5 dark:shadow-lg dark:shadow-black/50 cursor-pointer"
             >
-              <div className="w-10 h-10 rounded-xl bg-gray-50 border border-black/5 dark:bg-white/5 dark:border-white/10 flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-500">
+              <div className="w-11 h-11 rounded-xl bg-primary/5 border border-primary/15 dark:bg-white/5 dark:border-white/10 flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-200">
                 {card.icon}
               </div>
               <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">{card.title}</h3>
@@ -251,9 +256,9 @@ export default function Home() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-50px" }}
                 transition={{ duration: 0.6, delay: idx * 0.05, ease: [0.16, 1, 0.3, 1] }}
-                className="group flex gap-4 p-5 rounded-xl bg-white/50 dark:bg-white/[0.02] border border-black/5 dark:border-white/5 hover:bg-gray-50 hover:border-black/10 dark:hover:bg-white/[0.04] dark:hover:border-white/10 transition-all duration-300 cursor-default"
+                className="group flex gap-4 p-5 rounded-xl bg-white/50 dark:bg-white/[0.02] border border-black/5 dark:border-white/5 hover:bg-gray-50 hover:border-black/10 dark:hover:bg-white/[0.04] dark:hover:border-white/10 transition-all duration-200 ease-out cursor-default"
               >
-                <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-white/5 border border-black/5 dark:border-white/10 flex items-center justify-center shrink-0 text-gray-600 dark:text-gray-50 group-hover:scale-105 transition-transform duration-300">
+                <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-white/5 border border-black/5 dark:border-white/10 flex items-center justify-center shrink-0 text-gray-600 dark:text-gray-50 group-hover:scale-105 transition-transform duration-200">
                   {feature.icon}
                 </div>
                 <div>
@@ -278,12 +283,12 @@ export default function Home() {
             Start for free with a Gemini API key — no credit card required. Upload your first document in under 30 seconds.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Button asChild size="lg" className="bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90 rounded-full px-10 h-12 text-sm font-medium shadow-[0_0_20px_rgba(0,0,0,0.1)] dark:shadow-[0_0_20px_rgba(255,255,255,0.1)] cursor-pointer">
+            <Button asChild size="xl">
               <Link href="/register">
                 Get Started Free <ArrowRight className="ml-2 w-4 h-4" />
               </Link>
             </Button>
-            <Button asChild variant="outline" size="lg" className="bg-transparent border-black/10 hover:bg-black/5 text-gray-900 dark:border-white/10 dark:hover:bg-white/5 dark:text-white rounded-full px-8 h-12 text-sm font-medium cursor-pointer">
+            <Button asChild variant="outline" size="xl">
               <Link href="/contact">
                 Contact Us
               </Link>

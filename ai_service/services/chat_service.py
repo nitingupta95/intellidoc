@@ -3,11 +3,10 @@ import asyncio
 import json
 import time
 import os
-import httpx
 from typing import List, Optional
 from fastapi import BackgroundTasks
 from llm.rag_chain import RAGChain
-from services.credit_accounting import estimate_prompt_tokens, credits_for_usage, CREDIT_RATES
+from services.credit_accounting import estimate_prompt_tokens, credits_for_usage, debit_credits, CREDIT_RATES
 from core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -35,6 +34,14 @@ async def log_analytics_event(event_type: str, data: dict):
     logger.info(f"Logged analytics event: {event_type}")
 
 
+def system_embedding_credits(texts: List[str]) -> int:
+    """Credits for embedding `texts` on the system OpenAI key (min 1 when any text)."""
+    if not texts:
+        return 0
+    tokens = estimate_prompt_tokens("text-embedding-3-small", texts, [])
+    return credits_for_usage("embedding-default", tokens, 0)
+
+
 async def debit_wallet_task(
     user_id: str,
     uses_system_key: bool,
@@ -48,49 +55,43 @@ async def debit_wallet_task(
     did_web_search: bool = False,
     actual_usage: dict = None,
     cost_multiplier: float = 1.0,   # >1.0 for multi-hop KB queries
+    system_credits: int = 0,        # system resources used by a BYOK request (query embeddings)
 ):
-    if not uses_system_key or not user_id:
+    if not user_id:
         return
 
-    if actual_usage:
-        prompt_tokens = actual_usage.get("input_tokens", 0) + extra_prompt_tokens
-        completion_tokens = actual_usage.get("output_tokens", 0) + extra_completion_tokens
-    else:
-        # Estimate prompt
-        messages = history + [{"role": "user", "content": question}]
-        prompt_tokens = estimate_prompt_tokens(model, messages, context_docs) + extra_prompt_tokens
+    prompt_tokens = completion_tokens = 0
+    cost = 0
+    # LLM tokens are only billed when they ran on the system key; BYOK users pay their provider.
+    if uses_system_key:
+        if actual_usage:
+            prompt_tokens = actual_usage.get("input_tokens", 0) + extra_prompt_tokens
+            completion_tokens = actual_usage.get("output_tokens", 0) + extra_completion_tokens
+        else:
+            # Estimate prompt
+            messages = history + [{"role": "user", "content": question}]
+            prompt_tokens = estimate_prompt_tokens(model, messages, context_docs) + extra_prompt_tokens
 
-        # Estimate completion
-        completion_tokens = estimate_prompt_tokens(model, [{"content": answer}], []) + extra_completion_tokens
+            # Estimate completion
+            completion_tokens = estimate_prompt_tokens(model, [{"content": answer}], []) + extra_completion_tokens
 
-    cost = credits_for_usage(model, prompt_tokens, completion_tokens)
+        cost = credits_for_usage(model, prompt_tokens, completion_tokens)
 
-    # Apply multiplier for multi-hop KB queries (extra LLM judge calls + embed rounds)
-    if cost_multiplier != 1.0:
-        cost = round(cost * cost_multiplier)
+        # Apply multiplier for multi-hop KB queries (extra LLM judge calls + embed rounds)
+        if cost_multiplier != 1.0:
+            cost = round(cost * cost_multiplier)
 
-    if did_web_search:
+    # System resources are billed to everyone, including BYOK users.
+    cost += system_credits
+    if did_web_search:  # Tavily always runs on the system key
         cost += CREDIT_RATES.get("web-search", {}).get("perRequest", 10)
     if cost <= 0:
         return
         
-    app_url = settings.APP_URL
-    secret = settings.INTERNAL_SERVICE_SECRET
-    
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.post(
-                f"{app_url}/api/internal/wallet/{user_id}/debit",
-                headers={"Authorization": f"Bearer {secret}"},
-                json={"amount": cost, "metadata": {"model": model, "prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens, "web_search": did_web_search}},
-                timeout=10.0
-            )
-            if resp.status_code != 200:
-                logger.error(f"Failed to debit wallet for user {user_id}: {resp.text}")
-            else:
-                logger.info(f"Debited {cost} credits from user {user_id}")
-        except Exception as e:
-            logger.error(f"Exception during debit for user {user_id}: {e}")
+    await debit_credits(user_id, cost, "DEBIT_CHAT", {
+        "model": model, "prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens,
+        "web_search": did_web_search, "byok": not uses_system_key, "system_credits": system_credits,
+    })
 
 
 async def _stream_final_answer(
@@ -121,6 +122,7 @@ async def _stream_final_answer(
     hop_trace: Optional[list] = None,       # list of HopResult dicts for SSE event
     partial: bool = False,                  # True when maxHops hit without done=True
     cost_multiplier: float = 1.0,           # >1.0 for multi-hop KB queries
+    system_credits: int = 0,                # BYOK: system resources used (see debit_wallet_task)
 ):
     """
     Streams the final RAG answer back to the client.
@@ -225,7 +227,7 @@ async def _stream_final_answer(
 
         bg_tasks.add_task(save_chat_to_db, chat_id, question, full_answer, workspace_id)
         bg_tasks.add_task(log_analytics_event, "chat_query", metrics)
-        bg_tasks.add_task(debit_wallet_task, user_id, uses_system_key, model, question, context_docs, full_answer, history, extra_prompt_tokens, extra_completion_tokens, did_web_search, actual_usage, cost_multiplier)
+        bg_tasks.add_task(debit_wallet_task, user_id, uses_system_key, model, question, context_docs, full_answer, history, extra_prompt_tokens, extra_completion_tokens, did_web_search, actual_usage, cost_multiplier, system_credits)
 
         if history:
             bg_tasks.add_task(compress_history_task, chat_id, history, redis_client, x_openai_api_key, x_gemini_api_key)

@@ -12,13 +12,10 @@ export async function GET() {
     const user = await db.user.findUnique({ where: { id: session.user.id } });
     const isBYOK = !!(user?.openaiKey || user?.geminiKey);
 
-    if (isBYOK) {
-      return NextResponse.json({ isBYOK: true });
-    }
-
+    // BYOK users are billed for system resources too, so they need to see their balance.
     const wallet = await db.creditWallet.findUnique({ where: { userId: session.user.id } });
     return NextResponse.json({ 
-      isBYOK: false, 
+      isBYOK, 
       balance: wallet?.balance ?? 0,
       lifetimeGranted: wallet?.lifetimeGranted ?? 0,
       lifetimeSpent: wallet?.lifetimeSpent ?? 0

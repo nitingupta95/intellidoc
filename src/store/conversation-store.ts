@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { truncateWords } from '@/lib/utils';
 
 export interface Message {
   id: string;
@@ -11,6 +12,8 @@ export interface Message {
   confirmationResolved?: boolean;
   /** Phase 3: true when the answer was synthesized across multiple document sections */
   isSynthesized?: boolean;
+  /** Badge text for synthesized answers; notes when multi-hop retrieval may be incomplete */
+  synthesisNote?: string;
 }
 
 export interface Conversation {
@@ -55,7 +58,7 @@ interface ConversationState {
   appendStreamToLastMessage: (chunk: string) => void;
   setCitationsToLastMessage: (citations: any[]) => void;
   setConfirmationOnLastMessage: (data: { pending_id: string; verdict: string; reason: string; good_docs_count: number; answerability?: string }) => void;
-  setSynthesizedOnLastMessage: (reason?: string) => void;
+  setSynthesizedOnLastMessage: (data?: { reason?: string; partial?: boolean }) => void;
   resolveWebSearch: (conversationId: string, pendingId: string, consent: boolean) => Promise<void>;
   _consumeSSEStream: (res: Response, astMsgId: string) => Promise<void>;
 }
@@ -207,7 +210,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     // If no active conversation, create one first
     if (!conversationId) {
       try {
-        conversationId = await createConversation(content.substring(0, 30), workspaceId, knowledgeBaseId, documentId);
+        conversationId = await createConversation(truncateWords(content, 40), workspaceId, knowledgeBaseId, documentId);
       } catch (e) {
         console.error('Failed to init conversation for message', e);
         return;
@@ -259,14 +262,18 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     if (!res.body) return;
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
+    // A read can end mid-line (large citation payloads), so hold the trailing
+    // partial line until its newline arrives.
+    let buffer = '';
     let done = false;
 
     while (!done) {
       const { value, done: doneReading } = await reader.read();
       done = doneReading;
-      const chunkValue = decoder.decode(value);
-      
-      const lines = chunkValue.split('\n');
+      buffer += decoder.decode(value, { stream: !doneReading });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
       for (const line of lines) {
         if (line.startsWith('data: ')) {
           const dataStr = line.substring(6).replace(/\r$/, '');
@@ -283,12 +290,11 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
                 get().setConfirmationOnLastMessage(json.data);
               } else if (json.event === 'synthesis_mode') {
                 // Phase 3: mark this message as synthesized so SynthesisBadge renders
-                get().setSynthesizedOnLastMessage(json.data?.reason);
-              } else if (typeof json === 'string') {
-                get().appendStreamToLastMessage(json);
-              } else {
+                get().setSynthesizedOnLastMessage(json.data);
+              } else if (!json.event) {
                 get().appendStreamToLastMessage(dataStr);
               }
+              // Other events (e.g. multi_hop_trace) are metadata, not answer text.
             } else if (typeof json === 'string') {
               get().appendStreamToLastMessage(json);
             } else {
@@ -404,11 +410,14 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     return { messages: newMessages };
   }),
 
-  setSynthesizedOnLastMessage: (_reason?: string) => set((state) => {
+  setSynthesizedOnLastMessage: (data) => set((state) => {
     const newMessages = [...state.messages];
     const lastMessage = newMessages[newMessages.length - 1];
     if (lastMessage && lastMessage.role === 'assistant') {
       lastMessage.isSynthesized = true;
+      if (data?.reason) {
+        lastMessage.synthesisNote = data.partial ? `${data.reason} May be incomplete.` : data.reason;
+      }
     }
     return { messages: newMessages };
   }),

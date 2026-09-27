@@ -26,6 +26,16 @@ class Settings(BaseSettings):
     # Generate: openssl rand -hex 32
     INTERNAL_SERVICE_SECRET: str
     GEMINI_API_KEY: str = ""
+
+    # ── Gemini models ─────────────────────────────────────────────────────────
+    # gemini-1.5-* and embedding-001 are retired (embedding-001 shut down
+    # 2025-10-30). Override via env when Google retires these.
+    GEMINI_CHAT_MODEL: str = "gemini-3.8-flash"        # answer generation
+    GEMINI_FAST_MODEL: str = "gemini-3.5-flash-lite"   # judge / CRAG / refiner / rewrite
+    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
+    # Must match the documents_gemini Qdrant collection's vector size.
+    GEMINI_EMBEDDING_DIM: int = 768
+
     LOW_BALANCE_THRESHOLD: int = 5000
     NEGATIVE_GRACE_CREDITS: int = 2000
 

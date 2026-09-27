@@ -33,7 +33,7 @@ export default function Error({
         <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
           <Button 
             onClick={() => reset()}
-            className="bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90 rounded-full px-8"
+            size="xl"
           >
             <RotateCcw className="w-4 h-4 mr-2" />
             Try again
@@ -42,7 +42,7 @@ export default function Error({
           <Button 
             asChild 
             variant="outline" 
-            className="bg-transparent border-black/10 hover:bg-black/5 text-gray-900 dark:border-white/10 dark:hover:bg-white/5 dark:text-white rounded-full px-8"
+            size="xl"
           >
             <Link href="/">
               <Home className="w-4 h-4 mr-2" />

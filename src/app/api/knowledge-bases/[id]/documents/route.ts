@@ -63,3 +63,60 @@ export async function POST(
     return NextResponse.json({ error: 'Failed to link documents' }, { status: 500 });
   }
 }
+
+// DELETE /api/knowledge-bases/[id]/documents
+// Body: { documentIds: string[] }  — unlinks (does NOT delete) documents from this KB.
+// Any workspace member may remove a document from the KB regardless of who uploaded it.
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const resolvedParams = await params;
+    const knowledgeBaseId = resolvedParams.id;
+    const body = await req.json();
+    const { documentIds } = body;
+
+    if (!Array.isArray(documentIds) || documentIds.length === 0) {
+      return NextResponse.json({ error: 'documentIds array is required' }, { status: 400 });
+    }
+
+    // Verify user is a member of the workspace that owns this KB
+    const kb = await db.knowledgeBase.findUnique({
+      where: { id: knowledgeBaseId },
+      include: {
+        workspace: {
+          include: {
+            members: {
+              where: { userId: session.user.id }
+            }
+          }
+        }
+      }
+    });
+
+    if (!kb || kb.workspace.members.length === 0) {
+      return NextResponse.json({ error: 'Forbidden or Knowledge Base not found' }, { status: 403 });
+    }
+
+    // Unlink: set knowledgeBaseId = null so the document still exists in the workspace
+    await db.document.updateMany({
+      where: {
+        id: { in: documentIds },
+        knowledgeBaseId: knowledgeBaseId,          // only touch docs that actually belong here
+        workspaceId: kb.workspaceId,               // safety: same workspace
+      },
+      data: { knowledgeBaseId: null },
+    });
+
+    return NextResponse.json({ success: true, count: documentIds.length });
+  } catch (error: any) {
+    console.error('Unlink Documents Error:', error);
+    return NextResponse.json({ error: 'Failed to remove documents from knowledge base' }, { status: 500 });
+  }
+}

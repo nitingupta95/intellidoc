@@ -81,21 +81,21 @@ export function DocumentCards({
                 <Button 
                   onClick={() => router.push(`/documents/${doc.id}`)}
                   variant="outline" 
-                  className="w-full justify-start h-12 rounded-xl"
+                  className="w-full justify-start h-12"
                 >
                   <FileText className="mr-2 h-4 w-4" /> View Details
                 </Button>
                 <Button 
                   onClick={() => router.push(`/chat?documentId=${doc.id}&documentTitle=${encodeURIComponent(doc.title)}`)}
                   variant="outline" 
-                  className="w-full justify-start h-12 rounded-xl"
+                  className="w-full justify-start h-12"
                 >
                   <MessageSquare className="mr-2 h-4 w-4" /> Chat with Document
                 </Button>
                 <Button 
                   onClick={() => setDocumentToDelete(doc.id)}
                   variant="outline" 
-                  className="w-full justify-start h-12 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20"
+                  className="w-full justify-start h-12 text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20"
                 >
                   <Trash2 className="mr-2 h-4 w-4" /> Delete
                 </Button>

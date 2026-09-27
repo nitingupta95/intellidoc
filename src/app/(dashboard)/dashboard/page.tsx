@@ -6,6 +6,7 @@ import {
   Sparkles
 } from "lucide-react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
@@ -25,6 +26,9 @@ export default async function DashboardPage() {
     aiQueries,
     avgConfidence,
     timeSavedHours,
+    documentsChange,
+    queriesChange,
+    queryTrend,
     activity,
     insights,
   } = await getDashboardData(userId);
@@ -37,12 +41,12 @@ export default async function DashboardPage() {
           <h1 className="text-2xl md:text-3xl font-heading font-bold tracking-tight text-foreground">Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-1">Overview of your intelligent document workspace.</p>
         </div>
-        <Link href="/documents">
-          <button className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg font-medium text-sm hover:opacity-90 transition-opacity">
-            <FileText size={18} />
+        <Button asChild size="lg">
+          <Link href="/documents">
+            <FileText />
             Upload Document
-          </button>
-        </Link>
+          </Link>
+        </Button>
       </div>
 
       {/* STAT CARDS ROW */}
@@ -50,28 +54,29 @@ export default async function DashboardPage() {
         <StatCard
           title="Total Documents"
           value={totalDocuments.toString()}
-          change="+0%"
+          change={documentsChange}
           icon={<FileText size={18} className="text-blue-500 dark:text-blue-400" />}
           iconBg="bg-blue-500/10"
         />
         <StatCard
           title="AI Queries"
           value={aiQueries.toString()}
-          change="+0%"
+          change={queriesChange}
+          trend={queryTrend}
+          trendLabel="AI queries per day, last 14 days"
           icon={<MessageSquare size={18} className="text-purple-500 dark:text-purple-400" />}
           iconBg="bg-purple-500/10"
         />
         {/* <StatCard
           title="Avg Confidence"
           value={avgConfidence > 0 ? `${avgConfidence.toFixed(1)}%` : "N/A"}
-          change="+0%"
           icon={<Zap size={18} className="text-amber-500 dark:text-amber-400" />}
           iconBg="bg-amber-500/10"
         /> */}
         <StatCard
           title="Time Saved"
           value={`${timeSavedHours} hrs`}
-          change="+0%"
+          change={queriesChange} /* derived from query count, so it moves with it */
           icon={<Clock size={18} className="text-teal-500 dark:text-teal-400" />}
           iconBg="bg-teal-500/10"
         />
@@ -124,7 +129,7 @@ export default async function DashboardPage() {
                     : "bg-emerald-500/5 border-emerald-500/10 dark:bg-emerald-500/10 dark:border-emerald-500/20"
                   }`}
               >
-                <h3 className={`text-sm font-medium mb-1 ${insight.color === "purple" ? "text-purple-600 dark:text-purple-400" : "text-emerald-600 dark:text-emerald-400"
+                <h3 className={`text-sm font-medium mb-1 ${insight.color === "purple" ? "text-purple-600 dark:text-purple-400" : "text-emerald-700 dark:text-emerald-400" /* 600 was 3.4:1 on the tinted card */
                   }`}>
                   {insight.title}
                 </h3>

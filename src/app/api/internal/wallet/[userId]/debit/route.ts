@@ -1,5 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
-import { debitCredits } from "@/lib/wallet";
+import { debitCredits, type DebitType } from "@/lib/wallet";
+
+const DEBIT_TYPES: DebitType[] = ["DEBIT_CHAT", "DEBIT_EMBEDDING", "DEBIT_VOICE", "DEBIT_SUMMARY"];
 import { env } from "@/env";
 
 export async function POST(
@@ -14,13 +16,16 @@ export async function POST(
     }
 
     const body = await req.json();
-    const { amount, metadata } = body;
+    const { amount, metadata, type = "DEBIT_CHAT" } = body;
 
     if (amount === undefined || typeof amount !== 'number') {
       return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
     }
+    if (!DEBIT_TYPES.includes(type)) {
+      return NextResponse.json({ error: "Invalid debit type" }, { status: 400 });
+    }
 
-    const result = await debitCredits(params.userId, amount, metadata);
+    const result = await debitCredits(params.userId, amount, metadata, type);
     
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 402 });

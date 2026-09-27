@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 interface KbDocumentsTableProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   documents: any[];
-  deleteDocument: (docId: string) => Promise<void>;
+  deleteDocument: (docId: string) => void;
   formatMimeType: (mime: string) => string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   router: any;
@@ -88,7 +88,7 @@ export function KbDocumentsTable({
                     variant="ghost" 
                     size="icon" 
                     className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                    title="Delete Document"
+                    title="Remove from KB"
                   >
                     <Trash2 size={16} />
                   </Button>

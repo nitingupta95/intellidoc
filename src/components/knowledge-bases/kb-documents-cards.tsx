@@ -15,7 +15,7 @@ import { MobileDrawer } from "@/components/layout/mobile-drawer";
 interface KbDocumentsCardsProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   documents: any[];
-  deleteDocument: (docId: string) => Promise<void>;
+  deleteDocument: (docId: string) => void;
   formatMimeType: (mime: string) => string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   router: any;
@@ -64,16 +64,16 @@ export function KbDocumentsCards({
                 <Button 
                   onClick={() => router.push(`/chat?documentId=${doc.id}&documentTitle=${encodeURIComponent(doc.title)}`)}
                   variant="outline" 
-                  className="w-full justify-start h-12 rounded-xl"
+                  className="w-full justify-start h-12"
                 >
                   <MessageSquare className="mr-2 h-4 w-4" /> Chat
                 </Button>
                 <Button 
                   onClick={() => deleteDocument(doc.id)}
                   variant="outline" 
-                  className="w-full justify-start h-12 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20"
+                  className="w-full justify-start h-12 text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20"
                 >
-                  <Trash2 className="mr-2 h-4 w-4" /> Delete
+                  <Trash2 className="mr-2 h-4 w-4" /> Remove from KB
                 </Button>
               </div>
             </MobileDrawer>

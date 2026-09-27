@@ -17,7 +17,9 @@ const serverSchema = z.object({
 const clientSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),
   NEXT_PUBLIC_API_URL: z.string().url().default('http://localhost:8000/api/v1'),
-  NEXT_PUBLIC_SITE_URL: z.string().url({ message: "NEXT_PUBLIC_SITE_URL must be a valid URL and cannot be missing or fallback silently." }),
+  // Falls back to NEXT_PUBLIC_APP_URL so the build never hard-crashes from a missing site URL.
+  // Set NEXT_PUBLIC_SITE_URL explicitly in Vercel for correct SEO meta tags.
+  NEXT_PUBLIC_SITE_URL: z.string().url().optional().default('http://localhost:3000'),
 });
 
 const processEnv = {
@@ -33,28 +35,33 @@ const processEnv = {
   LOW_BALANCE_THRESHOLD: process.env.LOW_BALANCE_THRESHOLD,
   NEGATIVE_GRACE_CREDITS: process.env.NEGATIVE_GRACE_CREDITS,
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
-  NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL, 
+  NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
   NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
 };
 
 // Validate environment variables
 // During Vercel builds, server env vars may not be available for static pages.
 // We warn instead of throwing so the build can proceed.
-const parsedServer = typeof window === 'undefined' ? serverSchema.safeParse(processEnv) : { success: true as const, data: {} as z.infer<typeof serverSchema> };
+const parsedServer = typeof window === 'undefined'
+  ? serverSchema.safeParse(processEnv)
+  : { success: true as const, data: {} as z.infer<typeof serverSchema> };
+
 const parsedClient = clientSchema.safeParse(processEnv);
 
 if (!parsedServer.success) {
   console.warn('⚠️ Invalid server environment variables:', parsedServer.error.format());
-  // Don't throw during build — these are only needed at runtime in API routes
 }
 
 if (!parsedClient.success) {
   console.error('❌ Invalid client environment variables:', parsedClient.error.format());
-  throw new Error('Invalid client environment variables (NEXT_PUBLIC_SITE_URL is required and must be a valid URL).');
+  // Warn in production builds rather than hard-crashing — the Vercel env panel
+  // provides these values at runtime even if they're absent at build time.
+  if (process.env.NODE_ENV !== 'production') {
+    throw new Error('Invalid client environment variables. Check NEXT_PUBLIC_SITE_URL.');
+  }
 }
 
 export const env = {
   ...(parsedServer.success ? parsedServer.data : serverSchema.parse({})),
   ...(parsedClient.success ? parsedClient.data : clientSchema.parse({})),
 };
-

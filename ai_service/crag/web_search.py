@@ -25,7 +25,7 @@ def _get_rewrite_chain(openai_api_key: str = None, gemini_api_key: str = None):
         )
     elif gemini_api_key:
         llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model=settings.GEMINI_FAST_MODEL,
             temperature=0,
             google_api_key=gemini_api_key
         )
@@ -37,7 +37,7 @@ def _get_rewrite_chain(openai_api_key: str = None, gemini_api_key: str = None):
         )
     elif settings.GEMINI_API_KEY:
         llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model=settings.GEMINI_FAST_MODEL,
             temperature=0,
             google_api_key=settings.GEMINI_API_KEY
         )

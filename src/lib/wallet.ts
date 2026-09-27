@@ -1,7 +1,9 @@
 import { db } from "@/lib/db";
 import { env } from "@/env";
 
-export async function debitCredits(userId: string, amount: number, metadata: any = {}) {
+export type DebitType = 'DEBIT_CHAT' | 'DEBIT_EMBEDDING' | 'DEBIT_VOICE' | 'DEBIT_SUMMARY';
+
+export async function debitCredits(userId: string, amount: number, metadata: any = {}, type: DebitType = 'DEBIT_CHAT') {
   if (amount <= 0) return { success: true, balance: 0 };
   
   // Debit query using raw SQL for row-level lock and safety against race conditions
@@ -28,7 +30,7 @@ export async function debitCredits(userId: string, amount: number, metadata: any
     data: {
       walletId: wallet.id,
       amount: -amount,
-      type: "DEBIT_CHAT",
+      type,
       balanceAfter: wallet.balance,
       metadata: metadata || {}
     }

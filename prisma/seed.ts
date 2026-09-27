@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { PrismaClient, Plan, SubscriptionStatus, PaymentStatus, WorkspaceRole, InviteStatus } from '@prisma/client';
+import { PrismaClient, Plan, SubscriptionStatus, PaymentStatus, WorkspaceRole, InviteStatus, CreditTxType, CreditTxStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -8,6 +8,8 @@ async function main() {
   console.log('🌱 Seeding database...');
 
   // ─── Clean up existing data ─────────────────────────────────────────────────
+  await prisma.creditTransaction.deleteMany();
+  await prisma.creditWallet.deleteMany();
   await prisma.citation.deleteMany();
   await prisma.messageFeedback.deleteMany();
   await prisma.message.deleteMany();
@@ -484,7 +486,7 @@ async function main() {
   const msg2 = await prisma.message.create({
     data: {
       conversationId: conv1.id,
-      role: 'USER',
+      role: 'user',
       content: 'Can you explain how multi-head attention works in the Transformer architecture?',
     },
   });
@@ -492,7 +494,7 @@ async function main() {
   const msg3 = await prisma.message.create({
     data: {
       conversationId: conv1.id,
-      role: 'ASSISTANT',
+      role: 'assistant',
       content: 'Multi-head attention runs h attention functions in parallel, each on a different learned linear projection of the queries, keys, and values. The outputs are concatenated and projected again. This allows the model to jointly attend to information from different representation subspaces at different positions. The paper uses h=8 parallel attention heads with d_k = d_v = d_model/h = 64.',
       confidence: 0.96,
       faithfulness: 0.94,
@@ -507,7 +509,7 @@ async function main() {
   await prisma.message.create({
     data: {
       conversationId: conv1.id,
-      role: 'USER',
+      role: 'user',
       content: 'What is positional encoding and why is it needed?',
     },
   });
@@ -515,7 +517,7 @@ async function main() {
   const msg5 = await prisma.message.create({
     data: {
       conversationId: conv1.id,
-      role: 'ASSISTANT',
+      role: 'assistant',
       content: 'Since the Transformer contains no recurrence or convolution, positional encodings are added to give the model information about the relative or absolute position of tokens. The paper uses sine and cosine functions of different frequencies: PE(pos, 2i) = sin(pos/10000^(2i/d_model)) and PE(pos, 2i+1) = cos(...). This lets the model learn to attend by relative positions.',
       confidence: 0.93,
       faithfulness: 0.91,
@@ -530,7 +532,7 @@ async function main() {
   await prisma.message.create({
     data: {
       conversationId: conv2.id,
-      role: 'USER',
+      role: 'user',
       content: 'What is the key difference between BERT and GPT?',
     },
   });
@@ -538,7 +540,7 @@ async function main() {
   const msg7 = await prisma.message.create({
     data: {
       conversationId: conv2.id,
-      role: 'ASSISTANT',
+      role: 'assistant',
       content: 'The fundamental difference is directionality. GPT uses a left-to-right (causal) language model — each token only attends to previous tokens. BERT is bidirectional — through masked language modeling, every token can attend to all other tokens in both directions. This makes BERT better at understanding tasks (classification, NER, QA), while GPT is better suited for text generation.',
       confidence: 0.92,
       faithfulness: 0.89,
@@ -553,7 +555,7 @@ async function main() {
   await prisma.message.create({
     data: {
       conversationId: conv3.id,
-      role: 'USER',
+      role: 'user',
       content: "How does RAG handle knowledge that is not in the model's training data?",
     },
   });
@@ -561,7 +563,7 @@ async function main() {
   const msg9 = await prisma.message.create({
     data: {
       conversationId: conv3.id,
-      role: 'ASSISTANT',
+      role: 'assistant',
       content: 'RAG augments the generator with a retriever that fetches relevant documents from a non-parametric external memory (like a vector store). At inference time, the query is encoded, similar passages are retrieved via MIPS, and both the query and retrieved passages are fed to the generator. This lets the model access up-to-date or domain-specific knowledge without retraining.',
       confidence: 0.95,
       faithfulness: 0.93,
@@ -576,7 +578,7 @@ async function main() {
   await prisma.message.create({
     data: {
       conversationId: conv4.id,
-      role: 'USER',
+      role: 'user',
       content: 'What message broker does IntelliDoc use for async processing?',
     },
   });
@@ -584,7 +586,7 @@ async function main() {
   const msg11 = await prisma.message.create({
     data: {
       conversationId: conv4.id,
-      role: 'ASSISTANT',
+      role: 'assistant',
       content: 'Based on the architecture document, IntelliDoc uses RabbitMQ as the message broker for asynchronous document ingestion tasks. The AI service consumes jobs from queues and publishes status updates back to the Next.js server.',
       confidence: 0.82,
       faithfulness: 0.80,
@@ -599,7 +601,7 @@ async function main() {
   await prisma.message.create({
     data: {
       conversationId: conv5.id,
-      role: 'USER',
+      role: 'user',
       content: 'How many days of paid leave do employees get annually?',
     },
   });
@@ -607,7 +609,7 @@ async function main() {
   const msg13 = await prisma.message.create({
     data: {
       conversationId: conv5.id,
-      role: 'ASSISTANT',
+      role: 'assistant',
       content: 'According to the Employee Handbook 2026, full-time employees are entitled to 21 days of paid annual leave, in addition to 10 public holidays. Part-time employees receive leave on a pro-rata basis. Unused leave can be carried forward up to a maximum of 10 days per year.',
       confidence: 0.98,
       faithfulness: 0.97,
@@ -733,6 +735,29 @@ async function main() {
   });
 
   console.log('✅ Created invitations');
+
+  // ─── Credit Wallets ──────────────────────────────────────────────────────
+  const nitinWallet = await prisma.creditWallet.create({
+    data: {
+      userId: nitin.id,
+      balance: 1000,
+      lifetimeGranted: 1000,
+      lifetimeSpent: 0,
+    },
+  });
+
+  await prisma.creditTransaction.create({
+    data: {
+      walletId: nitinWallet.id,
+      type: CreditTxType.SIGNUP_GRANT,
+      status: CreditTxStatus.COMPLETED,
+      amount: 1000,
+      balanceAfter: 1000,
+      metadata: { reason: 'Seed: initial credit grant' },
+    },
+  });
+
+  console.log('✅ Created credit wallet (1000 credits for ng61315@gmail.com)');
 
   console.log('\n🎉 Seeding complete! Summary:');
   console.log('   👤 4 Users  (alice, bob, charlie + ng61315@gmail.com)');

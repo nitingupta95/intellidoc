@@ -2,6 +2,8 @@ import { NextResponse, after } from 'next/server';
 import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { API_BASE_URL } from '@/lib/api';
+import { resolveAiKeys } from '@/lib/ai-keys';
+import { creditGuard } from '@/middleware/creditGuard';
 
 export const maxDuration = 60; 
 
@@ -27,8 +29,10 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     }
 
     const userRecord = await db.user.findUnique({ where: { id: session.user.id } });
-    const userOpenAIKey = userRecord?.openaiKey || process.env.OPENAI_API_KEY || "";
-    const userGeminiKey = userRecord?.geminiKey || process.env.GEMINI_API_KEY || "";
+    const { openaiKey: userOpenAIKey, geminiKey: userGeminiKey, isBYOK } = resolveAiKeys(userRecord);
+
+    const creditBlock = await creditGuard(session.user.id);
+    if (creditBlock) return creditBlock;
 
     // Proxy stream to FastAPI
     const response = await fetch(`${API_BASE_URL}/chat/resolve`, {
@@ -38,6 +42,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         'X-Internal-Secret': process.env.INTERNAL_SERVICE_SECRET || '',
         'X-OpenAI-API-Key': userOpenAIKey,
         'X-Gemini-API-Key': userGeminiKey,
+        'X-Uses-System-Key': isBYOK ? 'false' : 'true',
         'X-User-Id': session.user.id,
         'X-User-Plan': userRecord?.plan || "FREE",
       },
@@ -90,11 +95,10 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
                 if (json && typeof json === 'object') {
                   if (json.event === 'citations') {
                     citationsData = json.data;
-                  } else if (json.event === 'needs_confirmation') {
-                    continue;
-                  } else {
+                  } else if (!json.event) {
                     fullAssistantContent += dataStr;
                   }
+                  // other events are control signals, not answer text
                 } else if (typeof json === 'string') {
                   fullAssistantContent += json;
                 } else {

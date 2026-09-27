@@ -1,3 +1,5 @@
+import asyncio
+import json
 import logging
 import os
 import tempfile
@@ -9,6 +11,7 @@ from parsers.document_parser import DocumentParser
 from embeddings.semantic_chunker import SemanticChunker
 from embeddings.embedding_service import EmbeddingService
 from core.dependencies import get_vector_store
+from services.credit_accounting import credits_for_usage, debit_credits, estimate_prompt_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +67,20 @@ async def update_document_status(document_id: str, data: dict):
             await client.patch(url, json=data)
     except Exception as e:
         logger.error(f"Failed to update document status in Next.js: {e}")
+
+async def _bill_indexing(user_id, document_id, texts, sample_text, summary_data, openai_api_key, gemini_api_key):
+    """Bill the uploader for indexing work that ran on system keys; their own keys are billed by their provider."""
+    if not openai_api_key:  # embeddings ran on the system OpenAI key
+        tokens = estimate_prompt_tokens("text-embedding-3-small", texts, [])
+        await debit_credits(user_id, credits_for_usage("embedding-default", tokens, 0), "DEBIT_EMBEDDING",
+                            {"document_id": document_id, "chunks": len(texts), "tokens": tokens})
+
+    if not openai_api_key and not gemini_api_key and summary_data.get("summary"):  # summary on system gpt-4o-mini
+        prompt_tokens = estimate_prompt_tokens("gpt-4o-mini", [sample_text], []) + 100  # + instructions
+        completion_tokens = estimate_prompt_tokens("gpt-4o-mini", [json.dumps(summary_data)], [])
+        await debit_credits(user_id, credits_for_usage("gpt-4o-mini", prompt_tokens, completion_tokens), "DEBIT_SUMMARY",
+                            {"document_id": document_id, "prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens})
+
 
 async def process_document_pipeline(
     file_path: str, 
@@ -154,12 +171,13 @@ async def process_document_pipeline(
         embeddings = []
         provider, dim = None, None
         
+        # OpenAI embeddings only (the uploader's key, else the system key): every
+        # document in a workspace must share one vector space, and chat queries
+        # embed with OpenAI. A user's Gemini key is used for the summary below.
         for i in range(0, len(texts), batch_size):
             batch_texts = texts[i:i + batch_size]
-            batch_emb, prov, d = embedding_svc.embed_documents(
-                batch_texts, 
-                openai_api_key=openai_api_key, 
-                gemini_api_key=gemini_api_key
+            batch_emb, prov, d = await asyncio.to_thread(
+                embedding_svc.embed_documents, batch_texts, openai_api_key=openai_api_key or None,
             )
             embeddings.extend(batch_emb)
             if not provider:
@@ -174,8 +192,8 @@ async def process_document_pipeline(
         
         # 5. Generate Summary and Questions
         await update_document_status(document_id, {"currentStep": "Generating Summary", "progress": 95})
+        sample_text = " ".join([c["content"] for c in chunks[:5]])
         try:
-            sample_text = " ".join([c["content"] for c in chunks[:5]])
             summary_data = await rag_chain.generate_summary_and_questions(
                 sample_text, 
                 openai_api_key=openai_api_key, 
@@ -185,6 +203,12 @@ async def process_document_pipeline(
             logger.error(f"Failed to generate summary: {summary_err}")
             summary_data = {"summary": None, "suggestedQuestions": None}
         
+        try:
+            await _bill_indexing(uploaded_by, document_id, texts, sample_text, summary_data, openai_api_key, gemini_api_key)
+        except Exception:
+            # never fail an indexed document over billing
+            logger.exception(f"Billing failed for document {document_id}")
+
         await update_document_status(document_id, {
             "status": "INDEXED", 
             "currentStep": "Complete", 

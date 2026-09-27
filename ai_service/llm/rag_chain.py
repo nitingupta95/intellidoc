@@ -52,7 +52,7 @@ class RAGChain:
              "5. Format your response in rich Markdown: bold text, bullet points, and clear "
              "section headings where appropriate.\n"
              "6. If the context is prefixed with [PARTIAL_RETRIEVAL], prepend a ⚠️ callout: "
-             "\"**Note:** This answer may be incomplete — not all relevant documents were searched.\"\n\n"
+             "\"**Note:** This answer may be incomplete — retrieval stopped before every part of the question was confirmed.\"\n\n"
              "Context (grouped by source document):\n{context}"),
             MessagesPlaceholder(variable_name="history"),
             ("human", "{question}"),
@@ -77,7 +77,7 @@ class RAGChain:
             )
         if gemini_api_key:
             return ChatGoogleGenerativeAI(
-                model="gemini-1.5-pro",
+                model=settings.GEMINI_CHAT_MODEL,
                 temperature=0,
                 google_api_key=gemini_api_key,
             )
@@ -91,18 +91,22 @@ class RAGChain:
             )
         if settings.GEMINI_API_KEY:
             return ChatGoogleGenerativeAI(
-                model="gemini-1.5-pro",
+                model=settings.GEMINI_CHAT_MODEL,
                 temperature=0,
                 google_api_key=settings.GEMINI_API_KEY,
             )
         raise ValueError("No LLM API key available (neither OpenAI nor Gemini)")
 
-    def _get_fallback_llm(self, gemini_api_key: str = None):
-        """Return a Gemini LLM for use when OpenAI is quota-exhausted."""
-        key = gemini_api_key or settings.GEMINI_API_KEY
+    def _get_fallback_llm(self, gemini_api_key: str = None, openai_api_key: str = None):
+        """Return a Gemini LLM for use when OpenAI is quota-exhausted.
+
+        A BYOK user's exhausted OpenAI key only falls back to THEIR Gemini key —
+        never the system one, which would be unbilled system usage.
+        """
+        key = gemini_api_key or (None if openai_api_key else settings.GEMINI_API_KEY)
         if key:
             return ChatGoogleGenerativeAI(
-                model="gemini-1.5-pro",
+                model=settings.GEMINI_CHAT_MODEL,
                 temperature=0,
                 google_api_key=key,
             )
@@ -146,7 +150,7 @@ class RAGChain:
                 raise
 
         # Fallback to Gemini
-        fallback = self._get_fallback_llm(gemini_api_key)
+        fallback = self._get_fallback_llm(gemini_api_key, openai_api_key)
         if not fallback:
             raise ValueError("OpenAI credits exhausted and no Gemini API key available for fallback")
         logger.warning("OpenAI LLM quota exhausted — falling back to Gemini for answer generation")
@@ -164,7 +168,7 @@ class RAGChain:
         history: list[dict] = None,
         openai_api_key: str = None,
         gemini_api_key: str = None,
-        partial: bool = False,        # True when maxHops was hit without done=True
+        partial: bool = False,        # True when the hop loop ended without judge done=True
     ):
         """
         Multi-hop / multi-doc synthesis variant.
@@ -197,7 +201,7 @@ class RAGChain:
 
         # Prepend PARTIAL marker so Rule 6 fires inside the model
         if partial:
-            context_str = "[PARTIAL_RETRIEVAL — maxHops reached, answer may be incomplete]\n\n" + context_str
+            context_str = "[PARTIAL_RETRIEVAL — hop loop stopped before the judge confirmed sufficiency]\n\n" + context_str
 
         # Convert history
         lc_history = []
@@ -225,7 +229,7 @@ class RAGChain:
                 raise
 
         # Fallback to Gemini
-        fallback = self._get_fallback_llm(gemini_api_key)
+        fallback = self._get_fallback_llm(gemini_api_key, openai_api_key)
         if not fallback:
             raise ValueError("OpenAI credits exhausted and no Gemini API key available for fallback")
         logger.warning("OpenAI LLM quota exhausted — falling back to Gemini for multi-doc synthesis")
@@ -248,7 +252,7 @@ class RAGChain:
         if openai_api_key:
             llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
         elif gemini_api_key:
-            llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, google_api_key=gemini_api_key)
+            llm = ChatGoogleGenerativeAI(model=settings.GEMINI_FAST_MODEL, temperature=0, google_api_key=gemini_api_key)
         else:
             llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=settings.OPENAI_API_KEY)
             
@@ -286,7 +290,7 @@ class RAGChain:
         if openai_api_key:
             llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
         elif gemini_api_key:
-            llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, google_api_key=gemini_api_key)
+            llm = ChatGoogleGenerativeAI(model=settings.GEMINI_FAST_MODEL, temperature=0, google_api_key=gemini_api_key)
         else:
             llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=settings.OPENAI_API_KEY)
             

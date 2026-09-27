@@ -43,15 +43,24 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 
 _META_KEYWORDS = [
+    # Explicit summarization intent
     "summarize", "summarise", "summary", "overview", "summrsie", "sumarize",
+    # Quiz / key-points
     "question", "questions", "quiz", "key point", "main idea",
-    "explain this", "what is this document",
+    # Document-level broad queries
+    "explain this", "what is this document", "what is this pdf",
+    "all about", "about this", "about the document", "about the pdf",
+    "tell me about", "what does this", "what does the",
+    "explain the document", "explain the pdf", "explain this document",
+    "what can you tell", "give me an overview", "give an overview",
+    "what topics", "what information", "what is covered", "what are the",
+    "describe this", "describe the document", "describe the pdf",
 ]
 
 
 def _is_meta_query(question: str) -> bool:
     q = question.lower()
-    return any(kw in q for kw in _META_KEYWORDS) or (len(q) < 15 and "doc" in q)
+    return any(kw in q for kw in _META_KEYWORDS) or (len(q) < 20 and ("doc" in q or "pdf" in q or "file" in q))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -63,12 +72,12 @@ def _get_llm(openai_api_key: str = None, gemini_api_key: str = None):
     if openai_api_key:
         return ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
     if gemini_api_key:
-        return ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, google_api_key=gemini_api_key)
+        return ChatGoogleGenerativeAI(model=settings.GEMINI_FAST_MODEL, temperature=0, google_api_key=gemini_api_key)
     # System-level fallback: try OpenAI env key, then Gemini env key
     if settings.OPENAI_API_KEY:
         return ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=settings.OPENAI_API_KEY)
     if settings.GEMINI_API_KEY:
-        return ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, google_api_key=settings.GEMINI_API_KEY)
+        return ChatGoogleGenerativeAI(model=settings.GEMINI_FAST_MODEL, temperature=0, google_api_key=settings.GEMINI_API_KEY)
     raise ValueError("No LLM API key available for CRAG evaluation")
 
 
@@ -104,11 +113,11 @@ single chunk contains a verbatim answer. RAG is designed to combine information 
 
 Return ONLY valid JSON (no markdown, no extra text) with exactly three fields:
 
-{
+{{
   "topic_relevance": <float 0.0–1.0>,
   "answerability": "<DIRECT|SYNTHESIZABLE|INSUFFICIENT>",
   "reasoning": "<1–2 sentences>"
-}
+}}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FIELD DEFINITIONS
@@ -225,7 +234,8 @@ async def _run_set_level_eval(
             reasoning=reasoning,
         )
     except Exception as e:
-        logger.warning(f"Set-level CRAG eval failed: {e}; defaulting to INSUFFICIENT")
+        # Error level: a failing evaluator silently routes every query to web-search confirm
+        logger.error("Set-level CRAG eval failed; defaulting to INSUFFICIENT", exc_info=True)
         return SetEvalResult(
             topic_relevance=0.0,
             answerability=Answerability.INSUFFICIENT,

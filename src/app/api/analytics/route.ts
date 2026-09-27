@@ -110,7 +110,7 @@ export async function GET(req: Request) {
     }
 
     // 5. Storage growth over last 6 months
-    const storageData = [];
+    const storageDataRaw: { name: string; bytes: number }[] = [];
     const currentMonth = new Date().getMonth();
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     
@@ -121,8 +121,8 @@ export async function GET(req: Request) {
     sixMonthsAgo.setDate(1);
     sixMonthsAgo.setHours(0, 0, 0, 0);
 
-    const oldDocs = docs.filter(d => d.createdAt < sixMonthsAgo);
-    cumulativeSize += oldDocs.reduce((acc, doc) => acc + (doc.fileSize || 0), 0);
+    const oldDocs = docs.filter((d: { fileSize: number | null; createdAt: Date }) => d.createdAt < sixMonthsAgo);
+    cumulativeSize += oldDocs.reduce((acc: number, doc: { fileSize: number | null }) => acc + (doc.fileSize || 0), 0);
 
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
@@ -130,16 +130,23 @@ export async function GET(req: Request) {
       const monthIdx = d.getMonth();
       const year = d.getFullYear();
       
-      const monthDocs = docs.filter(doc => 
+      const monthDocs = docs.filter((doc: { fileSize: number | null; createdAt: Date }) => 
         doc.createdAt.getMonth() === monthIdx && doc.createdAt.getFullYear() === year
       );
       
-      cumulativeSize += monthDocs.reduce((acc, doc) => acc + (doc.fileSize || 0), 0);
-      storageData.push({
-        name: monthNames[monthIdx],
-        usage: parseFloat((cumulativeSize / (1024 * 1024 * 1024)).toFixed(3)) // GB
-      });
+      cumulativeSize += monthDocs.reduce((acc: number, doc: { fileSize: number | null }) => acc + (doc.fileSize || 0), 0);
+      storageDataRaw.push({ name: monthNames[monthIdx], bytes: cumulativeSize });
     }
+
+    // Auto-select unit: use MB when max cumulative size is under 1 GB
+    const maxBytes = Math.max(...storageDataRaw.map(d => d.bytes), 0);
+    const useGB   = maxBytes >= 1024 * 1024 * 1024;
+    const divisor = useGB ? (1024 * 1024 * 1024) : (1024 * 1024);
+    const storageUnit = useGB ? 'GB' : 'MB';
+    const storageData = storageDataRaw.map(d => ({
+      name:  d.name,
+      usage: parseFloat((d.bytes / divisor).toFixed(useGB ? 3 : 1)),
+    }));
 
     // ── RAGAS Quality Metrics ────────────────────────────────────────────────
     // Fetch all evaluated assistant messages (those with at least one RAGAS score)
@@ -234,6 +241,7 @@ export async function GET(req: Request) {
       },
       queryData,
       storageData,
+      storageUnit,
       ragas: {
         averages: ragasAvg,
         trend: ragasTrend,

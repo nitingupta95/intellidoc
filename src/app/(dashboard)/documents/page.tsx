@@ -79,7 +79,6 @@ export default function DocumentsPage() {
             onClick={() => setIsCreatingFolder(true)}
             variant="outline"
             disabled={!activeWorkspaceId}
-            className="font-medium rounded-full shadow-sm"
             data-tour="new-folder"
           >
             New Folder
@@ -93,7 +92,6 @@ export default function DocumentsPage() {
               fileInputRef.current?.click();
             }}
             disabled={isUploading || !activeWorkspaceId}
-            className="font-medium rounded-full px-6 shadow-lg shadow-primary/20"
           >
             {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
             {isUploading ? "Uploading..." : "Upload Files"}
@@ -124,7 +122,7 @@ export default function DocumentsPage() {
               ))}
             </select>
           )}
-          <Button variant="outline" className="glass rounded-full text-sm font-medium">
+          <Button variant="outline" className="glass">
             <Filter className="mr-2 h-4 w-4" />
             Filter
           </Button>
@@ -157,7 +155,7 @@ export default function DocumentsPage() {
             <p className="text-muted-foreground max-w-md mb-6">
               You need to select or create a workspace before you can upload and manage documents.
             </p>
-            <Button onClick={() => router.push('/settings/team')} className="rounded-full shadow-lg">
+            <Button onClick={() => router.push('/settings/team')}>
               Manage Workspaces
             </Button>
           </div>

@@ -9,7 +9,7 @@ export function useKbDetails() {
   const params = useParams();
   const id = params.id as string;
   const { activeWorkspaceId } = useWorkspaceStore();
-  
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [kb, setKb] = useState<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,7 +17,12 @@ export function useKbDetails() {
   const [loading, setLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
+  // ── Delete confirmation dialog state ────────────────────────────────────────
+  // pendingDeleteId holds the docId queued for deletion; null = dialog closed.
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const [isAddExistingOpen, setIsAddExistingOpen] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [workspaceDocuments, setWorkspaceDocuments] = useState<any[]>([]);
@@ -43,14 +48,11 @@ export function useKbDetails() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch KB details
         const kbRes = await fetch(`/api/knowledge-bases?workspaceId=${activeWorkspaceId}`);
         const kbData = await kbRes.json();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const foundKb = kbData.knowledgeBases?.find((k: any) => k.id === id);
         if (foundKb) setKb(foundKb);
-
-        // Fetch documents for this KB
         await fetchDocuments();
       } catch (error) {
         console.error("Failed to fetch data:", error);
@@ -60,11 +62,13 @@ export function useKbDetails() {
     };
 
     fetchData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspaceId, id]);
 
   useEffect(() => {
-    const hasProcessingDocs = documents.some(doc => doc.status === 'UPLOADED' || doc.status === 'PROCESSING');
+    const hasProcessingDocs = documents.some(
+      (doc) => doc.status === "UPLOADED" || doc.status === "PROCESSING"
+    );
     if (!hasProcessingDocs) return;
 
     const interval = setInterval(() => {
@@ -72,7 +76,7 @@ export function useKbDetails() {
     }, 3000);
 
     return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documents]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,12 +89,8 @@ export function useKbDetails() {
       formData.append("file", file);
       formData.append("workspaceId", activeWorkspaceId);
       formData.append("knowledgeBaseId", id);
-      
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
 
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
       if (!res.ok) throw new Error("Upload failed");
       await fetchDocuments(true);
     } catch (error) {
@@ -98,21 +98,45 @@ export function useKbDetails() {
       toast.error("Failed to upload document.");
     } finally {
       setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  const deleteDocument = async (docId: string) => {
-    if (!confirm("Are you sure you want to delete this document?")) return;
+  /** Opens the confirmation dialog for the given document. */
+  const requestDelete = (docId: string) => {
+    setPendingDeleteId(docId);
+  };
+
+  /** Called when the user clicks "Remove" in the AlertDialog. */
+  const confirmDelete = async () => {
+    if (!pendingDeleteId) return;
+    const docId = pendingDeleteId;
+    setIsDeleting(true);
     try {
-      const res = await fetch(`/api/documents/${docId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/knowledge-bases/${id}/documents`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentIds: [docId] }),
+      });
+
       if (res.ok) {
-        setDocuments(docs => docs.filter(doc => doc.id !== docId));
-        toast.success("Document deleted");
+        setDocuments((docs) => docs.filter((doc) => doc.id !== docId));
+        toast.success("Document removed from knowledge base");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || `Failed to remove document (${res.status})`);
       }
-    } catch (error) {
-      toast.error("Failed to delete document");
+    } catch {
+      toast.error("Failed to remove document — network error");
+    } finally {
+      setIsDeleting(false);
+      setPendingDeleteId(null);
     }
+  };
+
+  /** Called when the user clicks "Cancel" in the AlertDialog. */
+  const cancelDelete = () => {
+    setPendingDeleteId(null);
   };
 
   const fetchWorkspaceDocuments = async () => {
@@ -121,7 +145,6 @@ export function useKbDetails() {
       const res = await fetch(`/api/documents?workspaceId=${activeWorkspaceId}`);
       const data = await res.json();
       if (data.documents) {
-        // Filter out documents already in this KB
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const availableDocs = data.documents.filter((doc: any) => doc.knowledgeBaseId !== id);
         setWorkspaceDocuments(availableDocs);
@@ -136,7 +159,7 @@ export function useKbDetails() {
       fetchWorkspaceDocuments();
       setSelectedDocumentIds([]);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAddExistingOpen, activeWorkspaceId]);
 
   const handleLinkDocuments = async () => {
@@ -144,16 +167,16 @@ export function useKbDetails() {
     setIsLinking(true);
     try {
       const res = await fetch(`/api/knowledge-bases/${id}/documents`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentIds: selectedDocumentIds })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentIds: selectedDocumentIds }),
       });
       if (!res.ok) throw new Error("Failed to link documents");
-      
+
       toast.success(`${selectedDocumentIds.length} document(s) added to knowledge base`);
       setIsAddExistingOpen(false);
       fetchDocuments();
-    } catch (error) {
+    } catch {
       toast.error("Failed to add documents");
     } finally {
       setIsLinking(false);
@@ -161,8 +184,8 @@ export function useKbDetails() {
   };
 
   const toggleDocumentSelection = (docId: string) => {
-    setSelectedDocumentIds(prev => 
-      prev.includes(docId) ? prev.filter(id => id !== docId) : [...prev, docId]
+    setSelectedDocumentIds((prev) =>
+      prev.includes(docId) ? prev.filter((i) => i !== docId) : [...prev, docId]
     );
   };
 
@@ -179,7 +202,12 @@ export function useKbDetails() {
     selectedDocumentIds,
     isLinking,
     handleFileChange,
-    deleteDocument,
+    // Delete dialog state & handlers
+    pendingDeleteId,
+    isDeleting,
+    requestDelete,
+    confirmDelete,
+    cancelDelete,
     handleLinkDocuments,
     toggleDocumentSelection,
   };

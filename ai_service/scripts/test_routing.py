@@ -120,9 +120,6 @@ async def _stub_judge(original_query, accumulated_chunks, openai_api_key=None, g
     # Hop 1 only — need Nebula Cache SLA
     return False, "Failover time for Nebula Cache not found in hop-1 chunks.", "Nebula Cache failover time SLA"
 
-async def _stub_crag(query, chunks, openai_api_key=None, gemini_api_key=None):
-    return "CORRECT", "stub", 0.82
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Test cases
@@ -176,7 +173,6 @@ async def test_case_c_kb_multi_doc():
     # Now run the multi-hop engine with stubs
     import retrieval.multi_hop as mh_module
     mh_module._judge_sufficiency = _stub_judge
-    mh_module._run_crag_on_chunks = _stub_crag
 
     result = await mh_module.run_multi_hop(
         "What is the failover time for the caching layer?",

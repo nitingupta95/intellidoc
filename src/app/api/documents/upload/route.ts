@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { uploadFileToStorage } from '@/lib/storage';
 import { publishDocumentJob } from '@/lib/rabbitmq';
+import { creditGuard } from '@/middleware/creditGuard';
 
 export async function POST(req: Request) {
   try {
@@ -11,6 +12,11 @@ export async function POST(req: Request) {
     if (!session || !session.user || !session.user.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    // Indexing is billed (embeddings/summary on the system key), so check the wallet
+    // before anything is uploaded.
+    const creditBlock = await creditGuard(session.user.id);
+    if (creditBlock) return creditBlock;
 
     const formData = await req.formData();
     const file = formData.get('file') as File;

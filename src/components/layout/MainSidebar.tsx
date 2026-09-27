@@ -21,14 +21,28 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export function MainSidebar() {
+interface SidebarUser {
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+}
+
+export function MainSidebar({ initialUser }: { initialUser?: SidebarUser | null }) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(true);
   const { data: session } = useSession();
 
-  const user = session?.user;
-  const nameParts = user?.name ? user.name.split(" ") : [];
-  const initials = nameParts.length > 0 ? (nameParts[0][0] + (nameParts.length > 1 ? nameParts[1][0] : "")).toUpperCase() : "U";
+  // Server session renders the real user on first paint; the client session
+  // takes over once loaded (e.g. after a profile name/avatar update).
+  const user: SidebarUser | null | undefined = session?.user ?? initialUser;
+  const displayName = user?.name || user?.email?.split("@")[0] || "";
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
 
   return (
     <aside className={`glass border-r border-border flex flex-col justify-between hidden lg:flex shrink-0 transition-all duration-300 ${isOpen ? "w-64" : "w-20"}`}>
@@ -67,7 +81,7 @@ export function MainSidebar() {
         
         <nav className="space-y-2 flex-1">
           <NavItem href="/dashboard" icon={<LayoutDashboard size={20} />} label="Dashboard" active={pathname === "/dashboard"} isOpen={isOpen} />
-          {/* <NavItem href="/analytics" icon={<BarChart size={20} />} label="Analytics" active={pathname === "/analytics"} isOpen={isOpen} /> */}
+          <NavItem href="/analytics" icon={<BarChart size={20} />} label="Analytics" active={pathname === "/analytics"} isOpen={isOpen} />
           <NavItem href="/knowledge-bases" icon={<Database size={20} />} label="Knowledge Bases" active={pathname === "/knowledge-bases"} isOpen={isOpen} dataTour="nav-kb" />
           <NavItem href="/documents" icon={<Files size={20} />} label="Documents" active={pathname === "/documents"} isOpen={isOpen} dataTour="nav-docs" />
           <NavItem href="/chat" icon={<MessageSquare size={20} />} label="AI Chat" active={pathname.startsWith("/chat")} isOpen={isOpen} dataTour="nav-chat" />
@@ -82,14 +96,18 @@ export function MainSidebar() {
               <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary shrink-0 border border-primary/30 overflow-hidden">
                 {user?.image ? (
                   <img src={user.image} alt="Avatar" className="w-full h-full object-cover" />
-                ) : (
+                ) : initials ? (
                   <span className="text-sm font-medium">{initials}</span>
+                ) : (
+                  <User size={16} aria-hidden />
                 )}
               </div>
               {isOpen && (
                 <div className="flex flex-col min-w-0 flex-1">
-                  <span className="text-sm font-medium truncate">{user?.name || "User"}</span>
-                  <span className="text-xs text-muted-foreground truncate">{user?.email || "user@example.com"}</span>
+                  <span className="text-sm font-medium truncate">{displayName}</span>
+                  {user?.email && user.email !== displayName && (
+                    <span className="text-xs text-muted-foreground truncate">{user.email}</span>
+                  )}
                 </div>
               )}
             </div>

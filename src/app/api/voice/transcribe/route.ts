@@ -4,6 +4,10 @@ import { getRedisClient } from '@/lib/redis/client';
 import crypto from 'crypto';
 import OpenAI, { toFile } from 'openai';
 import { db } from '@/lib/db';
+import { safeDecryptApiKey } from '@/lib/crypto';
+import { creditGuard } from '@/middleware/creditGuard';
+import { debitCredits } from '@/lib/wallet';
+import { CREDIT_RATES } from '@/lib/creditRates';
 
 const MAX_FILE_SIZE = Number(process.env.VOICE_MAX_AUDIO_BYTES) || 10485760; // 10MB
 const ALLOWED_MIME_TYPES = (process.env.VOICE_ALLOWED_MIME_TYPES || 'audio/webm,audio/mp4,audio/ogg').split(',');
@@ -88,7 +92,16 @@ export async function POST(req: Request) {
 
     // Get user API keys if available, otherwise use env var
     const userRecord = await db.user.findUnique({ where: { id: session.user.id } });
-    const userOpenAIKey = userRecord?.openaiKey || process.env.OPENAI_API_KEY;
+    // Whisper is OpenAI-only: the user's own OpenAI key if they have one (not billed),
+    // otherwise the system key, billed per audio minute.
+    const ownOpenAIKey = safeDecryptApiKey(userRecord?.openaiKey);
+    const usesSystemKey = !ownOpenAIKey;
+    const userOpenAIKey = ownOpenAIKey || process.env.OPENAI_API_KEY;
+
+    if (usesSystemKey) {
+      const creditBlock = await creditGuard(session.user.id);
+      if (creditBlock) return creditBlock;
+    }
 
     if (!userOpenAIKey) {
       return NextResponse.json({ error: 'OpenAI API key not configured' }, { status: 500 });
@@ -106,11 +119,20 @@ export async function POST(req: Request) {
       file: fileForOpenAI,
       model: process.env.WHISPER_MODEL || 'whisper-1',
       language: process.env.WHISPER_LANGUAGE !== 'auto' ? (process.env.WHISPER_LANGUAGE || 'en') : undefined,
+      response_format: 'verbose_json', // includes audio duration for billing
     });
 
     const whisperLatencyMs = Math.round(performance.now() - whisperStart);
     
     const transcript = response.text;
+
+    // Billed on actual audio length (rounded up to whole credits); cache hits above are free.
+    const audioSeconds = Number(response.duration) || 0;
+    if (usesSystemKey && audioSeconds > 0) {
+      const cost = Math.ceil((audioSeconds / 60) * CREDIT_RATES["whisper-1"].perMinute);
+      const debit = await debitCredits(session.user.id, cost, { model: 'whisper-1', audioSeconds }, 'DEBIT_VOICE');
+      if (!debit.success) console.error('[voice] Failed to debit wallet:', debit.error);
+    }
 
     // Cache the result for 1 hour
     if (transcript && transcript.trim().length > 0) {

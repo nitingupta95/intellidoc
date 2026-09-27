@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi import BackgroundTasks
 
 from schemas.chat import ChatRequest, ResolveRequest
-from services.chat_service import _stream_final_answer
+from services.chat_service import _stream_final_answer, system_embedding_credits
 from embeddings.embedding_service import EmbeddingService
 from retrieval.reranker import reranker
 from retrieval.multi_hop import run_multi_hop
@@ -83,11 +83,29 @@ async def handle_chat_query(
         user_id = fastapi_req.headers.get("x-user-id") if fastapi_req else None
         uses_system_key = fastapi_req.headers.get("x-uses-system-key", "true").lower() == "true" if fastapi_req else False
         model = "gpt-4o"
+
+        # ── Key resolution ────────────────────────────────────────────────────
+        # When uses_system_key=true the user has NO stored BYOK keys.
+        # Next.js forwards its own OPENAI_API_KEY as a convenience, but that key
+        # may have different quota/billing from the AI-service's OPENAI_API_KEY.
+        # To avoid "credit_balance_exhausted" on whichever system key happens to
+        # be depleted, let the AI service use its OWN settings.OPENAI_API_KEY
+        # (which is what document ingestion uses) by passing None here.
+        # The EmbeddingService and chat_service already fall back to settings.* when
+        # the passed-in key is None.
+        if uses_system_key:
+            x_openai_api_key = None
+            x_gemini_api_key = None
         
         q_hash = hashlib.sha256(request.query.encode()).hexdigest()
-        doc_ids_str = ",".join(sorted(request.document_ids)) if request.document_ids else "all"
         kb_id_str = request.knowledge_base_id or "none"
-        full_resp_key = f"resp:{request.workspace_id}:{kb_id_str}:{doc_ids_str}:{q_hash}"
+        # Doc scope + chat history are part of the key: a follow-up like "tell me
+        # more" must not replay an answer cached at a different point in a
+        # conversation. Hashed so large doc sets don't produce multi-KB keys.
+        ctx_hash = hashlib.sha256(json.dumps(
+            [sorted(request.document_ids or []), request.history or []], sort_keys=True
+        ).encode()).hexdigest()[:32]
+        full_resp_key = f"resp:{request.workspace_id}:{kb_id_str}:{ctx_hash}:{q_hash}"
 
         cached_response = await redis_client.get(full_resp_key)
         if cached_response:
@@ -111,7 +129,11 @@ async def handle_chat_query(
                 emb_data = json.loads(cached_emb)
                 return emb_data["vector"], emb_data["provider"], emb_data["dim"]
             else:
-                vector, prov, d = embedding_svc.embed_query(query, openai_api_key=x_openai_api_key, gemini_api_key=x_gemini_api_key)
+                # Documents are indexed with OpenAI embeddings (system key), so queries
+                # must be too: the user's OpenAI key if they have one, else the system key.
+                vector, prov, d = await asyncio.to_thread(
+                    embedding_svc.embed_query, query, openai_api_key=x_openai_api_key or None,
+                )
                 await redis_client.setex(emb_cache_key, 30 * 24 * 3600, json.dumps({"vector": vector, "provider": prov, "dim": d}))
                 return vector, prov, d
 
@@ -138,6 +160,16 @@ async def handle_chat_query(
 
         is_summary_request = bool(SUMMARY_REQUEST_PATTERN.search(request.query))
 
+        # Route before retrieving so a multi-hop query never pays for a
+        # single-shot search it would discard. Summary requests need every
+        # chunk, so they never hop.
+        if is_summary_request:
+            should_hop, hop_reason = False, "summary request"
+        else:
+            should_hop, hop_reason = _should_run_multi_hop(request)
+        logger.info("ROUTING: multi_hop=%s reason=%r", should_hop, hop_reason)
+
+        mh_result = None
         if is_summary_request:
             logger.info("Summary request detected: bypassing vector search and fetching all chunks.")
             # Fetch all chunks using scroll
@@ -152,6 +184,27 @@ async def handle_chat_query(
             )
             # Sort by chunk index if available to maintain natural order
             search_results = sorted(search_results, key=lambda x: x.payload.get("metadata", {}).get("chunk_index", 0))
+        elif should_hop:
+            mh_result = await run_multi_hop(
+                request.query,
+                vector_store=vs,
+                embedding_svc=embedding_svc,
+                reranker=reranker,
+                workspace_id=request.workspace_id,
+                knowledge_base_id=request.knowledge_base_id,
+                document_ids=request.document_ids,
+                team_id=request.team_id,
+                department=request.department,
+                project=request.project,
+                openai_api_key=x_openai_api_key,
+                gemini_api_key=x_gemini_api_key,
+                max_hops=settings.MULTI_HOP_MAX_HOPS,
+                redis_client=redis_client,
+                latency_budget_s=settings.MULTI_HOP_LATENCY_BUDGET_S,
+                query_vector=query_vector,
+                document_names=request.document_names,
+            )
+            search_results = []
         else:
             search_results = await vs.search(
                 query_vector=query_vector,
@@ -178,21 +231,37 @@ async def handle_chat_query(
 
         retrieved_docs = []
         citations = []
+        doc_names = request.document_names or {}
         for res in search_results:
             payload = res.payload or {}
             text = payload.get("content", "")
+            meta = payload.get("metadata", {})
+            if meta.get("document_id") in doc_names:
+                meta = {**meta, "document_name": doc_names[meta["document_id"]]}
             retrieved_docs.append(text)
             citations.append({
                 "score": getattr(res, "score", 1.0),
                 "text_snippet": text[:150] + "..." if len(text) > 150 else text,
                 "full_text": text,
-                "metadata": payload.get("metadata", {}),
+                "metadata": meta,
             })
+
+        if mh_result is not None:
+            citations = mh_result.all_chunks
+            retrieved_docs = [c.get("full_text", "") for c in citations]
 
         if not retrieved_docs:
             retrieved_docs = ["No relevant context found in documents."]
 
         t_search = time.perf_counter() - t_search_start
+
+        # A BYOK user without an OpenAI key had their query (and any follow-up hop
+        # queries) embedded on the system key — bill that; key-holders pay their provider.
+        embedded_queries = [h.query_used for h in mh_result.hops] if mh_result else [request.query]
+        system_credits = (
+            system_embedding_credits(embedded_queries)
+            if not uses_system_key and not x_openai_api_key else 0
+        )
 
         if is_summary_request:
             # Bypass CRAG completely for whole-document structural summaries
@@ -204,128 +273,46 @@ async def handle_chat_query(
                     request.workspace_id, redis_client, bg_tasks, x_openai_api_key, x_gemini_api_key,
                     full_resp_key, t0, t_embed, t_search,
                     synthesized=True,
-                    user_id=user_id, uses_system_key=uses_system_key, model=model
+                    user_id=user_id, uses_system_key=uses_system_key, model=model,
+                    system_credits=system_credits,
                 ),
                 media_type="text/event-stream"
             )
 
-        # ── Routing: decide whether to run the multi-hop loop ─────────────────
-        # This replaces the old ENABLE_MULTI_HOP global flag gate.
-        # Never hop on summary requests — they need all chunks anyway.
-        should_hop, hop_reason = _should_run_multi_hop(request)
-        if is_summary_request:
-            should_hop = False
-            hop_reason = "summary request"
-        logger.info("ROUTING: multi_hop=%s reason=%r", should_hop, hop_reason)
-
-        if should_hop:
-            logger.info("MULTI_HOP enabled — starting iterative hop loop for query=%r", request.query)
-            mh_result = await run_multi_hop(
-                request.query,
-                vector_store=vs,
-                embedding_svc=embedding_svc,
-                reranker=reranker,
-                workspace_id=request.workspace_id,
-                knowledge_base_id=request.knowledge_base_id,
-                document_ids=request.document_ids,
-                team_id=request.team_id,
-                department=request.department,
-                project=request.project,
-                openai_api_key=x_openai_api_key,
-                gemini_api_key=x_gemini_api_key,
-                max_hops=settings.MULTI_HOP_MAX_HOPS,
-                redis_client=redis_client,
-                latency_budget_s=settings.MULTI_HOP_LATENCY_BUDGET_S,
-            )
-
-            # Build hop trace for SSE event (serialisable summary)
-            hop_trace = [
-                {
-                    "hop": h.hop_number,
-                    "query": h.query_used,
-                    "chunks_retrieved": len(h.chunks),
-                    "crag_verdict": h.crag_verdict,
-                    "crag_blended_score": round(h.crag_blended_score, 4),
-                    "crag_reasoning": h.crag_reasoning[:120],
-                }
-                for h in mh_result.hops
-            ]
-            logger.info("MULTI_HOP trace: %s", hop_trace)
-
-            citations = mh_result.all_chunks
-            retrieved_docs = [c.get("full_text", "") for c in citations]
-
-            # Run a final holistic CRAG evaluation on the full accumulated set
-            eval_result = await crag_evaluator.evaluate_documents(
-                request.query, citations, x_openai_api_key, x_gemini_api_key
-            )
-
-            # CORRECT / SYNTHESIZABLE — stream with multi-doc synthesis prompt
-            if eval_result.verdict in (EvalVerdict.CORRECT, EvalVerdict.AMBIGUOUS):
-                # partial=True when the loop was cut off before judge returned done=True
-                # (maxHops, latencyBudget, or noNewChunks are all best-effort exits)
-                _PARTIAL_REASONS = {"maxHops", "latencyBudget", "noNewChunks"}
-                is_partial = mh_result.done_reason in _PARTIAL_REASONS
-
-                # For multi-hop paths the CRAG refiner produces a flat merged string
-                # which re-defeats the per-doc grouping.  Skip the refiner and let
-                # stream_answer_multi_doc format from chunks_by_doc directly.
-                final_citations = eval_result.good_docs if eval_result.good_docs else citations
-                return StreamingResponse(
-                    _stream_final_answer(
-                        request.query, retrieved_docs, final_citations, request.history, chat_id,
-                        request.workspace_id, redis_client, bg_tasks, x_openai_api_key, x_gemini_api_key,
-                        full_resp_key, t0, t_embed, t_search,
-                        synthesized=True,
-                        user_id=user_id, uses_system_key=uses_system_key, model=model,
-                        chunks_by_doc=mh_result.chunks_by_doc,
-                        hop_trace=hop_trace,
-                        partial=is_partial,
-                        cost_multiplier=settings.MULTI_HOP_COST_MULTIPLIER,
-                    ),
-                    media_type="text/event-stream"
-                )
-
-
-            # INCORRECT — fall through to the existing confirm/web-search flow
-            # (same logic as single-shot path below)
-            pending_id = str(uuid.uuid4())
-            ctx = PendingCRAGContext(
-                pending_id=pending_id,
-                query=request.query,
-                verdict=eval_result.verdict,
-                good_docs=eval_result.good_docs if eval_result.good_docs else citations,
-                workspace_id=request.workspace_id,
-                knowledge_base_id=request.knowledge_base_id,
-                document_ids=request.document_ids,
-                history=request.history or [],
-                created_at=time.time(),
-                answerability=eval_result.answerability,
-                document_summaries=request.document_summaries,
-            )
-            await crag_pending_store.save_pending_context(redis_client, ctx)
-
-            async def mh_needs_confirm_gen():
-                yield (
-                    f"data: {{\"event\": \"multi_hop_trace\", \"data\": {json.dumps(hop_trace)}}}\n\n"
-                )
-                yield (
-                    f"data: {{\"event\": \"needs_confirmation\", \"data\": {{"
-                    f"\"pending_id\": \"{pending_id}\", "
-                    f"\"verdict\": \"{eval_result.verdict.value}\", "
-                    f"\"reason\": \"{eval_result.reason}\", "
-                    f"\"good_docs_count\": {len(citations)}, "
-                    f"\"answerability\": \"{eval_result.answerability.value}\""
-                    f"}}}}\n\n"
-                )
-                yield "data: [DONE]\n\n"
-
-            return StreamingResponse(mh_needs_confirm_gen(), media_type="text/event-stream")
-
-        # ── Single-shot path (single_doc or KB with 1 doc) ────────────────────
         eval_result = await crag_evaluator.evaluate_documents(
             request.query, citations, x_openai_api_key, x_gemini_api_key
         )
+
+        # ── Multi-hop: CORRECT / AMBIGUOUS → multi-doc synthesis ─────────────
+        # (multi-hop INCORRECT falls through to the shared confirm flow below)
+        if mh_result is not None and eval_result.verdict in (EvalVerdict.CORRECT, EvalVerdict.AMBIGUOUS):
+            hop_trace = [
+                {"hop": h.hop_number, "query": h.query_used, "chunks_retrieved": len(h.chunks)}
+                for h in mh_result.hops
+            ]
+            logger.info("MULTI_HOP trace: %s done_reason=%r", hop_trace, mh_result.done_reason)
+
+            # The CRAG refiner flattens context into one string, which would undo
+            # the per-doc grouping, so stream_answer_multi_doc formats from
+            # chunks_by_doc directly.
+            return StreamingResponse(
+                _stream_final_answer(
+                    request.query, retrieved_docs, eval_result.good_docs or citations, request.history, chat_id,
+                    request.workspace_id, redis_client, bg_tasks, x_openai_api_key, x_gemini_api_key,
+                    # a best-effort (partial) answer must not be pinned in the response cache
+                    full_resp_key=None if mh_result.partial else full_resp_key,
+                    t0=t0, t_embed=t_embed, t_search=t_search,
+                    synthesized=True,
+                    user_id=user_id, uses_system_key=uses_system_key, model=model,
+                    system_credits=system_credits,
+                    chunks_by_doc=mh_result.chunks_by_doc,
+                    hop_trace=hop_trace,
+                    partial=mh_result.partial,
+                    # only charge the multiplier when extra hops actually ran
+                    cost_multiplier=settings.MULTI_HOP_COST_MULTIPLIER if len(mh_result.hops) > 1 else 1.0,
+                ),
+                media_type="text/event-stream"
+            )
 
         # ── CORRECT verdict (DIRECT or blended-score SYNTHESIZABLE) ──────────
         if eval_result.verdict == EvalVerdict.CORRECT:
@@ -347,7 +334,8 @@ async def handle_chat_query(
                     request.workspace_id, redis_client, bg_tasks, x_openai_api_key, x_gemini_api_key,
                     full_resp_key, t0, t_embed, t_search,
                     synthesized=is_synthesized,
-                    user_id=user_id, uses_system_key=uses_system_key, model=model
+                    user_id=user_id, uses_system_key=uses_system_key, model=model,
+                    system_credits=system_credits,
                 ),
                 media_type="text/event-stream"
             )
@@ -376,7 +364,8 @@ async def handle_chat_query(
                         full_resp_key=None,  # don't cache ambiguous synthesis
                         t0=t0, t_embed=t_embed, t_search=t_search,
                         synthesized=True,
-                        user_id=user_id, uses_system_key=uses_system_key, model=model
+                        user_id=user_id, uses_system_key=uses_system_key, model=model,
+                        system_credits=system_credits,
                     ),
                     media_type="text/event-stream"
                 )
@@ -438,6 +427,12 @@ async def handle_chat_resolve(
     user_id = fastapi_req.headers.get("x-user-id") if fastapi_req else None
     uses_system_key = fastapi_req.headers.get("x-uses-system-key", "true").lower() == "true" if fastapi_req else False
     model = "gpt-4o"
+
+    # Same key-resolution fix as handle_chat_query: let the AI service use its
+    # own settings.OPENAI_API_KEY rather than a potentially-exhausted forwarded key.
+    if uses_system_key:
+        x_openai_api_key = None
+        x_gemini_api_key = None
 
     chat_id = ctx.history[-1].get("chat_id", "default") if ctx.history else "default"
 

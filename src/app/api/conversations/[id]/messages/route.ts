@@ -3,6 +3,8 @@ import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { API_BASE_URL } from '@/lib/api';
 import { creditGuard } from '@/middleware/creditGuard';
+import { truncateWords } from '@/lib/utils';
+import { resolveAiKeys } from '@/lib/ai-keys';
 
 export const maxDuration = 60; // Allow enough time for background RAGAS evaluation
 
@@ -56,13 +58,15 @@ async function runRAGASEvaluation(
 
     const evalUrl = `${API_BASE_URL}/evaluate`;
 
+    // Only send API key headers when we have an actual key — empty string
+    // headers fool the FastAPI endpoint into thinking a key was provided.
+    const evalHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (userOpenAIKey) evalHeaders['X-OpenAI-API-Key'] = userOpenAIKey;
+    if (userGeminiKey) evalHeaders['X-Gemini-API-Key'] = userGeminiKey;
+
     const resp = await fetch(evalUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-OpenAI-API-Key': userOpenAIKey,
-        'X-Gemini-API-Key': userGeminiKey,
-      },
+      headers: evalHeaders,
       body: JSON.stringify({
         question,
         answer,
@@ -141,11 +145,10 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     // Touch conversation to update its 'updatedAt' so it jumps to top
     try {
       if (conversation.title === 'New Chat') {
-        const titleSnippet = message.substring(0, 30);
         await db.conversation.update({
           where: { id: params.id },
           data: {
-            title: titleSnippet + (message.length > 30 ? '...' : ''),
+            title: truncateWords(message, 40),
             updatedAt: new Date()
           }
         });
@@ -175,58 +178,87 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     const metadata = conversation.metadata as Record<string, any> || {};
 
     const userRecord = await db.user.findUnique({ where: { id: session.user.id } });
-    const userOpenAIKey = userRecord?.openaiKey || process.env.OPENAI_API_KEY || "";
-    const userGeminiKey = userRecord?.geminiKey || process.env.GEMINI_API_KEY || "";
-    const isBYOK = !!(userRecord?.openaiKey || userRecord?.geminiKey);
+    const { openaiKey: userOpenAIKey, geminiKey: userGeminiKey, isBYOK } = resolveAiKeys(userRecord);
 
-    const creditBlock = await creditGuard(session.user.id, isBYOK);
+    // BYOK users are still billed for system resources (query embeddings, web search),
+    // so everyone goes through the wallet guard.
+    const creditBlock = await creditGuard(session.user.id);
     if (creditBlock) return creditBlock;
 
     // Fetch document IDs to restrict search and their summaries for web-search sanity check
     let documentIds: string[] = [];
     const documentSummaries: Record<string, string> = {};
+    // Display names so multi-doc answers and citations name their source file
+    const documentNames: Record<string, string> = {};
     // context_type is the authoritative chat-mode signal sent to the AI service.
     // single_doc  = user is chatting with exactly one document.
     // knowledge_base = user is chatting across a KB or their whole workspace.
     let contextType: 'single_doc' | 'knowledge_base';
+    // Only fully indexed documents are searchable — UPLOADED/PROCESSING/ERROR ones
+    // have missing or partial chunks and must never be cited. The pipeline writes
+    // INDEXED; READY is the older vocabulary still used by the seed data.
+    const READY = { in: ['INDEXED', 'READY'] };
 
     if (metadata.documentId) {
-      documentIds = [metadata.documentId];
       contextType = 'single_doc';
-      const doc = await db.document.findUnique({
-        where: { id: metadata.documentId },
-        select: { id: true, summary: true }
+      const doc = await db.document.findFirst({
+        where: { id: metadata.documentId, status: READY },
+        select: { id: true, summary: true, title: true, filename: true }
       });
-      if (doc && doc.summary) documentSummaries[doc.id] = doc.summary;
+      if (doc) {
+        documentIds = [doc.id];
+        if (doc.summary) documentSummaries[doc.id] = doc.summary;
+        documentNames[doc.id] = doc.title || doc.filename;
+      }
     } else if (conversation.knowledgeBaseId) {
       const docs = await db.document.findMany({
-        where: { knowledgeBaseId: conversation.knowledgeBaseId },
-        select: { id: true, summary: true }
+        where: { knowledgeBaseId: conversation.knowledgeBaseId, status: READY },
+        select: { id: true, summary: true, title: true, filename: true }
       });
-      documentIds = docs.map((d: { id: string; summary: string | null }) => d.id);
-      docs.forEach((d: { id: string; summary: string | null }) => { if (d.summary) documentSummaries[d.id] = d.summary; });
+      documentIds = docs.map((d) => d.id);
+      docs.forEach((d) => {
+        if (d.summary) documentSummaries[d.id] = d.summary;
+        documentNames[d.id] = d.title || d.filename;
+      });
       contextType = 'knowledge_base';
     } else {
       const docs = await db.document.findMany({
-        where: { workspaceId: conversation.workspaceId },
-        select: { id: true, summary: true }
+        where: { workspaceId: conversation.workspaceId, status: READY },
+        select: { id: true, summary: true, title: true, filename: true }
       });
-      documentIds = docs.map((d: { id: string; summary: string | null }) => d.id);
-      docs.forEach((d: { id: string; summary: string | null }) => { if (d.summary) documentSummaries[d.id] = d.summary; });
+      documentIds = docs.map((d) => d.id);
+      docs.forEach((d) => {
+        if (d.summary) documentSummaries[d.id] = d.summary;
+        documentNames[d.id] = d.title || d.filename;
+      });
       contextType = 'knowledge_base';
     }
 
+    // Nothing searchable yet: answer directly instead of sending an empty scope to
+    // the AI service (which would find nothing and offer a web search).
+    if (documentIds.length === 0) {
+      const notReady = "None of the documents in this chat are ready to search yet. They may still be processing, or processing may have failed. Check their status on the Documents page and try again once they show as indexed.";
+      await db.message.create({
+        data: { conversationId: params.id, role: 'assistant', content: notReady }
+      });
+      return new Response(`data: ${JSON.stringify(notReady)}\n\ndata: [DONE]\n\n`, {
+        headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+      });
+    }
+
     // Proxy stream to FastAPI
+    const chatHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Internal-Secret': process.env.INTERNAL_SERVICE_SECRET || '',
+      'X-Uses-System-Key': isBYOK ? 'false' : 'true',
+      'X-User-Id': session.user.id,
+    };
+    if (userOpenAIKey) chatHeaders['X-OpenAI-API-Key'] = userOpenAIKey;
+    if (userGeminiKey) chatHeaders['X-Gemini-API-Key'] = userGeminiKey;
+
     const response = await fetch(`${API_BASE_URL}/chat`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Internal-Secret': process.env.INTERNAL_SERVICE_SECRET || '',
-        'X-OpenAI-API-Key': userOpenAIKey,
-        'X-Gemini-API-Key': userGeminiKey,
-        'X-Uses-System-Key': isBYOK ? 'false' : 'true',
-        'X-User-Id': session.user.id,
-      },
+      headers: chatHeaders,
       body: JSON.stringify({
         query: message,
         workspace_id: conversation.workspaceId,
@@ -234,10 +266,10 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         document_ids: documentIds,
         history: formattedHistory,
         document_summaries: Object.keys(documentSummaries).length > 0 ? documentSummaries : null,
+        document_names: documentNames,
         context_type: contextType,
       }),
     });
-
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -293,12 +325,11 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
                         }
                       }
                     }
-                  } else if (json.event === 'needs_confirmation') {
-                    // Do not accumulate this into fullAssistantContent
-                    continue;
-                  } else {
+                  } else if (!json.event) {
                     fullAssistantContent += dataStr;
                   }
+                  // needs_confirmation / synthesis_mode / multi_hop_trace are
+                  // control events — never persist them as answer text.
                 } else if (typeof json === 'string') {
                   fullAssistantContent += json;
                 } else {
@@ -333,6 +364,10 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         if (savedMessageId && fullAssistantContent.trim()) {
           const evalMessageId = savedMessageId;
           const evalAssistantContent = fullAssistantContent.trim();
+          // For system-key users (isBYOK=false), pass empty strings so the AI service
+          // evaluator falls back to its own settings.OPENAI_API_KEY, not the gateway key.
+          const evalOpenAIKey = isBYOK ? userOpenAIKey : '';
+          const evalGeminiKey = isBYOK ? userGeminiKey : '';
           after(async () => {
             try {
               await runRAGASEvaluation(
@@ -340,8 +375,8 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
                 message,
                 evalAssistantContent,
                 contextChunksForEval,
-                userOpenAIKey,
-                userGeminiKey,
+                evalOpenAIKey,
+                evalGeminiKey,
               );
             } catch (err) {
               console.error('[RAGAS] Unhandled evaluation error:', err);

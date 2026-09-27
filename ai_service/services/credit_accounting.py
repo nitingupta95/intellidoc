@@ -1,7 +1,10 @@
 import math
 import logging
+import httpx
 import tiktoken
 from typing import List, Dict, Any, Tuple
+
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -9,6 +12,7 @@ logger = logging.getLogger(__name__)
 CREDIT_RATES = {
     "gpt-4o": {"input": 5, "output": 15},
     "gemini-2.0-flash": {"input": 1, "output": 3},
+    "gpt-4o-mini": {"input": 1, "output": 3},  # document summaries on the system key
     "whisper-1": {"perMinute": 6},
     "embedding-default": {"input": 1},
     "web-search": {"perRequest": 7},
@@ -50,6 +54,28 @@ def credits_for_usage(model: str, prompt_tokens: int, completion_tokens: int) ->
     
     cost = (prompt_tokens * input_rate / 1000.0) + (completion_tokens * output_rate / 1000.0)
     return math.ceil(cost)
+
+async def debit_credits(user_id: str, amount: int, tx_type: str, metadata: Dict[str, Any]) -> bool:
+    """Debit the user's wallet via the Next.js internal API. tx_type: DEBIT_CHAT | DEBIT_EMBEDDING | DEBIT_SUMMARY."""
+    if amount <= 0 or not user_id:
+        return True
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{settings.APP_URL}/api/internal/wallet/{user_id}/debit",
+                headers={"Authorization": f"Bearer {settings.INTERNAL_SERVICE_SECRET}"},
+                json={"amount": amount, "type": tx_type, "metadata": metadata},
+                timeout=10.0,
+            )
+        if resp.status_code != 200:
+            logger.error(f"Failed to debit {amount} ({tx_type}) for user {user_id}: {resp.text}")
+            return False
+        logger.info(f"Debited {amount} credits ({tx_type}) from user {user_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Exception during debit for user {user_id}: {e}")
+        return False
+
 
 def credits_for_audio(model: str, duration_seconds: float) -> int:
     """

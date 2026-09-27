@@ -320,16 +320,13 @@ async def test_cost_multiplier():
 
 async def test_is_partial_reasons():
     """latencyBudget and noNewChunks also set is_partial=True in the controller."""
-    _PARTIAL_REASONS = {"maxHops", "latencyBudget", "noNewChunks"}
+    from retrieval.multi_hop import MultiHopResult
     failures = []
-    for reason in _PARTIAL_REASONS:
-        is_partial = reason in _PARTIAL_REASONS
-        if not is_partial:
-            failures.append(f"done_reason={reason!r} should set is_partial=True")
-    for reason in ("judge_done", "embed_error_hop1", ""):
-        is_partial = reason in _PARTIAL_REASONS
-        if is_partial:
-            failures.append(f"done_reason={reason!r} should NOT set is_partial=True")
+    for reason in ("maxHops", "latencyBudget", "noNewChunks", "embed_error_hop2", "nextQuery_rephrase"):
+        if not MultiHopResult(done_reason=reason).partial:
+            failures.append(f"done_reason={reason!r} should set partial=True")
+    if MultiHopResult(done_reason="judge_done").partial:
+        failures.append("done_reason='judge_done' should NOT set partial=True")
     return failures
 
 
@@ -473,7 +470,7 @@ async def run_all():
             all_failures += fails
         else:
             print("  \u2713 maxHops, latencyBudget, noNewChunks \u2192 partial=True")
-            print("  \u2713 judge_done, embed_error \u2192 partial=False")
+            print("  \u2713 judge_done \u2192 partial=False")
     except Exception as e:
         print(f"  ERROR: {e}")
         all_failures.append(str(e))

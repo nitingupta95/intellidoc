@@ -1,6 +1,7 @@
 {
   "version": 2,
   "framework": "nextjs",
+  "buildCommand": "prisma migrate deploy && next build --turbopack",
   "functions": {
     "src/app/api/**/*.ts": {
       "maxDuration": 60

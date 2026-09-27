@@ -8,6 +8,26 @@ from core.config import settings
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+async def fetch_user_ai_keys(user_id: str) -> tuple[str | None, str | None]:
+    """The uploader's decrypted BYOK keys (openai, gemini) from the Next.js internal API.
+
+    Fetched at processing time so keys never sit in queue messages. On failure the
+    document is indexed on the system key (and billed) rather than not at all.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"{settings.APP_URL}/api/internal/users/{user_id}/ai-keys",
+                headers={"Authorization": f"Bearer {settings.INTERNAL_SERVICE_SECRET}"},
+            )
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("openaiKey") or None, data.get("geminiKey") or None
+    except Exception as e:
+        logger.error(f"Could not fetch AI keys for user {user_id}; indexing on system key: {e}")
+        return None, None
+
 async def process_message(message: IncomingMessage):
     async with message.process():
         body = message.body.decode()
@@ -21,7 +41,10 @@ async def process_message(message: IncomingMessage):
             knowledge_base_id = data.get("knowledgeBaseId")
             user_id = data.get("userId")
             
-            # Process it inline using the imported pipeline
+            # Index on the uploader's own key when they have one; the pipeline
+            # falls back to (and bills) the system key otherwise.
+            openai_key, gemini_key = await fetch_user_ai_keys(user_id)
+
             from services.document_service import process_document_pipeline
             await process_document_pipeline(
                 file_path=minio_path,
@@ -30,7 +53,8 @@ async def process_message(message: IncomingMessage):
                 uploaded_by=user_id,
                 knowledge_base_id=knowledge_base_id,
                 metadata=data,
-                openai_api_key=settings.OPENAI_API_KEY
+                openai_api_key=openai_key,
+                gemini_api_key=gemini_key,
             )
             logger.info(f"Successfully processed {document_id}")
                 

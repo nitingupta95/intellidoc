@@ -50,11 +50,9 @@ def _make_chunks_by_doc():
 def _make_hop_trace():
     return [
         {"hop": 1, "query": "What database does the system use?",
-         "chunks_retrieved": 2, "crag_verdict": "CORRECT",
-         "crag_blended_score": 0.81, "crag_reasoning": "stub"},
+         "chunks_retrieved": 2},
         {"hop": 2, "query": "Aurora DB read replica failover time SLA",
-         "chunks_retrieved": 2, "crag_verdict": "CORRECT",
-         "crag_blended_score": 0.88, "crag_reasoning": "stub"},
+         "chunks_retrieved": 2},
     ]
 
 

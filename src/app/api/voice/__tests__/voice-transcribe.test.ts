@@ -4,9 +4,15 @@ import { auth } from '@/auth';
 import { getRedisClient } from '@/lib/redis/client';
 import { db } from '@/lib/db';
 import OpenAI from 'openai';
+import { debitCredits } from '@/lib/wallet';
+import { creditGuard } from '@/middleware/creditGuard';
 
 // Mock dependencies
+vi.mock('@/lib/crypto', () => ({ safeDecryptApiKey: (v: string | null | undefined) => v ?? null }));
 vi.mock('@/auth', () => ({ auth: vi.fn() }));
+vi.mock('@/middleware/creditGuard', () => ({ creditGuard: vi.fn().mockResolvedValue(null) }));
+vi.mock('@/lib/wallet', () => ({ debitCredits: vi.fn().mockResolvedValue({ success: true }) }));
+vi.mock('@/lib/creditRates', () => ({ CREDIT_RATES: { 'whisper-1': { perMinute: 6 } } }));
 vi.mock('@/lib/redis/client', () => ({
   getRedisClient: vi.fn().mockResolvedValue({
     incr: vi.fn(),
@@ -23,7 +29,7 @@ vi.mock('@/lib/db', () => ({
   },
 }));
 vi.mock('openai', () => {
-  const mockCreate = vi.fn().mockResolvedValue({ text: 'Mock transcript' });
+  const mockCreate = vi.fn().mockResolvedValue({ text: 'Mock transcript', duration: 90 });
   class MockOpenAI {
     audio = {
       transcriptions: {
@@ -161,5 +167,51 @@ describe('POST /api/voice/transcribe', () => {
     expect(data.cached).toBe(false);
     expect(data.transcript).toBe('Mock transcript');
     expect(mockRedis.setex).toHaveBeenCalled();
+    // Own OpenAI key: Whisper runs on it, nothing billed
+    expect(creditGuard).not.toHaveBeenCalled();
+    expect(debitCredits).not.toHaveBeenCalled();
+  });
+
+  it('should bill per audio minute when Whisper runs on the system key', async () => {
+    (auth as any).mockResolvedValueOnce({ user: { id: 'user-1' } });
+    (getRedisClient as any).mockResolvedValue({
+      incr: vi.fn().mockResolvedValue(1),
+      expire: vi.fn(),
+      get: vi.fn().mockResolvedValue(null),
+      setex: vi.fn(),
+    });
+    // Gemini-only BYOK user: no OpenAI key of their own
+    (db.user.findUnique as any).mockResolvedValueOnce({ openaiKey: null, geminiKey: 'g-key' });
+    process.env.OPENAI_API_KEY = 'system-key';
+
+    const res = await POST(new Request('http://localhost/api/voice/transcribe', {
+      method: 'POST',
+      body: createFormData(),
+    }));
+
+    expect(res.status).toBe(200);
+    expect(creditGuard).toHaveBeenCalledWith('user-1');
+    // 90s at 6 credits/min = 9 credits
+    expect(debitCredits).toHaveBeenCalledWith('user-1', 9, { model: 'whisper-1', audioSeconds: 90 }, 'DEBIT_VOICE');
+  });
+
+  it('should block system-key transcription when the wallet is exhausted', async () => {
+    (auth as any).mockResolvedValueOnce({ user: { id: 'user-1' } });
+    (getRedisClient as any).mockResolvedValue({
+      incr: vi.fn().mockResolvedValue(1),
+      expire: vi.fn(),
+      get: vi.fn().mockResolvedValue(null),
+      setex: vi.fn(),
+    });
+    (db.user.findUnique as any).mockResolvedValueOnce({ openaiKey: null });
+    (creditGuard as any).mockResolvedValueOnce(new Response(null, { status: 402 }));
+
+    const res = await POST(new Request('http://localhost/api/voice/transcribe', {
+      method: 'POST',
+      body: createFormData(),
+    }));
+
+    expect(res.status).toBe(402);
+    expect(debitCredits).not.toHaveBeenCalled();
   });
 });

@@ -127,7 +127,7 @@ export function ChatMessages({
                 <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
                   {msg.citations.map((cit: any, i: number) => (
                     <div key={i} className="px-3 py-1.5 rounded-lg bg-background/50 border border-border text-[10px] shrink-0 max-w-[200px]">
-                      <span className="font-bold block truncate text-primary">Doc • {(cit.score * 100).toFixed(1)}% match</span>
+                      <span className="font-bold block truncate text-primary">{cit.metadata?.document_name ?? 'Doc'} • {(cit.score * 100).toFixed(1)}% match</span>
                       <span className="truncate block opacity-70">{cit.text_snippet}</span>
                     </div>
                   ))}
@@ -152,7 +152,7 @@ export function ChatMessages({
             )}
 
             {msg.isSynthesized && !msg.needsConfirmation && (
-              <SynthesisBadge />
+              <SynthesisBadge reason={msg.synthesisNote} />
             )}
 
             {msg.isStreaming && isGenerating && idx === messages.length - 1 && (

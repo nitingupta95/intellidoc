@@ -181,10 +181,6 @@ async def run_test():
     # Patch internal functions with stubs
     mh_module._judge_sufficiency = _stub_judge
 
-    # Patch _run_crag_on_chunks (it does a local import, so patch the module attr)
-    async def _stub_run_crag(query, chunks, openai_api_key=None, gemini_api_key=None):
-        return "CORRECT", "stub reasoning", 0.80
-    mh_module._run_crag_on_chunks = _stub_run_crag
 
     ORIGINAL_QUERY = (
         "What is the read-replica failover time for the database used in our system architecture?"
@@ -210,8 +206,6 @@ async def run_test():
         print(f"  Hop {h.hop_number}:")
         print(f"    query_used       : {h.query_used!r}")
         print(f"    chunks_retrieved : {len(h.chunks)}")
-        print(f"    crag_verdict     : {h.crag_verdict}")
-        print(f"    crag_score       : {h.crag_blended_score:.4f}")
     print(f"  done_reason        : {result.done_reason}")
     print(f"  total_chunks       : {len(result.all_chunks)}")
     print("\n── CHUNKS BY DOC ───────────────────────────────────────────────────")

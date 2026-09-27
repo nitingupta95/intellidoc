@@ -11,7 +11,7 @@ Plus two supplementary structural health checks:
   5. validate_chunk_metadata()  — detects missing document_id / page_number
   6. detect_duplicate_chunks()  — flags redundant chunks wasting top-k slots
 
-All LLM calls use a lightweight model (gpt-4o-mini / gemini-1.5-flash) to
+All LLM calls use a lightweight model (gpt-4o-mini / settings.GEMINI_FAST_MODEL) to
 keep evaluation costs minimal. Each full evaluation makes 4 LLM calls.
 """
 
@@ -159,7 +159,7 @@ class RAGASEvaluator:
                 )
             elif gemini_api_key:
                 self._llm_cache[key] = ChatGoogleGenerativeAI(
-                    model="gemini-1.5-flash",
+                    model=settings.GEMINI_FAST_MODEL,
                     temperature=0,
                     google_api_key=gemini_api_key
                 )
@@ -181,8 +181,9 @@ class RAGASEvaluator:
                 )
             elif gemini_api_key:
                 self._emb_cache[key] = GoogleGenerativeAIEmbeddings(
-                    model="models/embedding-001",
-                    google_api_key=gemini_api_key
+                    model=settings.GEMINI_EMBEDDING_MODEL,
+                    google_api_key=gemini_api_key,
+                    output_dimensionality=settings.GEMINI_EMBEDDING_DIM,
                 )
             else:
                 self._emb_cache[key] = OpenAIEmbeddings(

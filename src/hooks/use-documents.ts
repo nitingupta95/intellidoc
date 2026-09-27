@@ -113,6 +113,9 @@ export function useDocuments() {
         });
 
         if (!presignRes.ok) {
+          if (presignRes.status === 402) {
+            throw new Error("Not enough credits to index this document. Top up on the Billing page.");
+          }
           const errData = await presignRes.json();
           throw new Error(errData.error || "Failed to initialize upload");
         }

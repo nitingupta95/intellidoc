@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
       { protocol: "https", hostname: "avatars.githubusercontent.com" },
       { protocol: "https", hostname: "*.r2.cloudflarestorage.com" },
+      { protocol: "https", hostname: "*.s3.amazonaws.com" },
+      { protocol: "https", hostname: "*.s3.*.amazonaws.com" },
     ],
   },
 
@@ -22,10 +24,11 @@ const nextConfig: NextConfig = {
     "pdf-parse",
   ],
 
-  // Prevent ESLint warnings (set to "warn" in the config) from failing the Vercel build
+  // Prevent ESLint warnings from failing the Vercel build
   eslint: {
     ignoreDuringBuilds: true,
   },
+
 };
 
 export default nextConfig;

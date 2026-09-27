@@ -17,7 +17,7 @@ export default function NotFound() {
           The page or document you are looking for doesn't exist or has been moved. Let's get you back to safety.
         </p>
         
-        <Button asChild size="lg" className="bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90 rounded-full px-8">
+        <Button asChild size="xl">
           <Link href="/">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Return Home

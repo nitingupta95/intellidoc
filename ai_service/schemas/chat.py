@@ -15,6 +15,9 @@ class ChatRequest(BaseModel):
     # Document auto-summaries passed from the Next.js backend
     document_summaries: Optional[Dict[str, str]] = None
 
+    # {document_id: display name} so answers and citations name their source file
+    document_names: Optional[Dict[str, str]] = None
+
     # Chat mode declared by the gateway.
     # "single_doc"      — user is chatting with exactly one document.
     # "knowledge_base"  — user is chatting across a KB (possibly many docs).

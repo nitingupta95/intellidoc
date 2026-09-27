@@ -4,17 +4,20 @@ import { MainSidebar } from "@/components/layout/MainSidebar";
 import { WorkspaceSwitcher } from "@/components/layout/WorkspaceSwitcher";
 import { OnboardingTour } from "@/components/layout/OnboardingTour";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { auth } from "@/auth";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await auth();
+
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden w-full">
       <OnboardingTour />
       {/* Main Sidebar (Collapsible) */}
-      <MainSidebar />
+      <MainSidebar initialUser={session?.user} />
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col relative h-full overflow-hidden pb-16 lg:pb-0">

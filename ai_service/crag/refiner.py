@@ -1,5 +1,6 @@
 import re
 import asyncio
+import logging
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 
@@ -8,6 +9,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 
 from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 class KeepOrDrop(BaseModel):
     keep: bool
@@ -26,7 +29,7 @@ def _get_filter_chain(openai_api_key: str = None, gemini_api_key: str = None):
         )
     elif gemini_api_key:
         llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model=settings.GEMINI_FAST_MODEL,
             temperature=0,
             google_api_key=gemini_api_key
         )
@@ -38,7 +41,7 @@ def _get_filter_chain(openai_api_key: str = None, gemini_api_key: str = None):
         )
     elif settings.GEMINI_API_KEY:
         llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model=settings.GEMINI_FAST_MODEL,
             temperature=0,
             google_api_key=settings.GEMINI_API_KEY
         )
@@ -68,13 +71,8 @@ def _doc_text(d: Dict[str, Any]) -> str:
     return ""
 
 async def _filter_single_sentence(chain, question: str, sentence: str) -> Optional[str]:
-    try:
-        res = await chain.ainvoke({"question": question, "sentence": sentence})
-        if res.keep:
-            return sentence
-    except Exception:
-        pass
-    return None
+    res = await chain.ainvoke({"question": question, "sentence": sentence})
+    return sentence if res.keep else None
 
 async def refine(
     question: str, 
@@ -101,11 +99,23 @@ async def refine(
     # Bypass sentence filtering for meta-queries
     question_lower = question.lower()
     meta_keywords = [
+        # Explicit summarization intent
         "summarize", "summarise", "summary", "overview", "summrsie", "sumarize",
-        "question", "questions", "quiz", "key point", "main idea", 
-        "explain this", "what is this document"
+        # Quiz / key-points
+        "question", "questions", "quiz", "key point", "main idea",
+        # Document-level broad queries
+        "explain this", "what is this document", "what is this pdf",
+        "all about", "about this", "about the document", "about the pdf",
+        "tell me about", "what does this", "what does the",
+        "explain the document", "explain the pdf", "explain this document",
+        "what can you tell", "give me an overview", "give an overview",
+        "what topics", "what information", "what is covered", "what are the",
+        "describe this", "describe the document", "describe the pdf",
     ]
-    is_meta_query = any(kw in question_lower for kw in meta_keywords) or (len(question_lower) < 15 and "doc" in question_lower)
+    is_meta_query = (
+        any(kw in question_lower for kw in meta_keywords)
+        or (len(question_lower) < 20 and ("doc" in question_lower or "pdf" in question_lower or "file" in question_lower))
+    )
     if is_meta_query:
         return context_str
 
@@ -117,7 +127,18 @@ async def refine(
     chain = _get_filter_chain(openai_api_key, gemini_api_key)
     
     tasks = [_filter_single_sentence(chain, question, s) for s in sentences]
-    filtered_results = await asyncio.gather(*tasks)
-    
-    kept_sentences = [s for s in filtered_results if s is not None]
-    return " ".join(kept_sentences)
+    filtered_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    errors = [r for r in filtered_results if isinstance(r, Exception)]
+    if errors:
+        logger.error("CRAG refiner: %d/%d sentence checks failed: %r", len(errors), len(sentences), errors[0])
+        if len(errors) == len(sentences):
+            # The filter only trims context; if the model is down, keep all of it
+            # rather than returning "" (which reads as "your docs don't cover this").
+            return context_str
+
+    kept_sentences = [s for s in filtered_results if isinstance(s, str)]
+    # If the sentence filter drops everything (e.g. broad/paraphrase queries),
+    # fall back to the full unfiltered context so the LLM always has something
+    # to work with rather than triggering the "not enough context" canned reply.
+    return " ".join(kept_sentences) if kept_sentences else context_str

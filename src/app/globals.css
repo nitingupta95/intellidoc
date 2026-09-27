@@ -109,8 +109,8 @@
   --accent: oklch(0.20 0 0);
   --accent-foreground: oklch(0.98 0 0);
   --destructive: oklch(0.4 0.2 25);
-  --border: oklch(1 1 1 / 10%);
-  --input: oklch(1 1 1 / 10%);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 10%);
   --ring: oklch(0.98 0 0);
   
   --glass-bg: rgba(0, 0, 0, 0.6);
@@ -157,10 +157,5 @@
     -webkit-backdrop-filter: blur(var(--blur-amount));
     border: 1px solid var(--glass-border);
     @apply rounded-xl shadow-xl transition-all duration-300;
-  }
-
-  .glass-panel:hover {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
   }
 }
